@@ -57,6 +57,10 @@ function RootLayoutContent() {
             <Stack.Screen name="groups/join" options={{ headerShown: false, presentation: 'modal' }} />
             <Stack.Screen name="groups/[id]" options={{ headerShown: false, presentation: 'card' }} />
             <Stack.Screen name="upload/my-uploads" options={{ headerShown: false, presentation: 'card' }} />
+            <Stack.Screen name="streaks" options={{ headerShown: false, presentation: 'card' }} />
+            <Stack.Screen name="bookmarks" options={{ headerShown: false, presentation: 'card' }} />
+            <Stack.Screen name="downloads" options={{ headerShown: false, presentation: 'card' }} />
+            <Stack.Screen name="course/analysis" options={{ headerShown: false, presentation: 'card' }} />
           </Stack>
         </ToastProvider>
       </SafeAreaProvider>
