@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "Vectra",
+    "slug": "vectra",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "vectra",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router",
+      "expo-asset",
+      "expo-font",
+      "expo-audio",
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vectra.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Vectra needs access to your microphone to record lectures.",
+        "NSCameraUsageDescription": "Vectra needs camera access to take photos of lecture materials.",
+        "NSPhotoLibraryUsageDescription": "Vectra needs access to your photo library to attach lecture images."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0F2A44"
+      },
+      "package": "com.vectra.app",
+      "permissions": [
+        "RECORD_AUDIO",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE"
+      ]
+    }
+  }
+}
