@@ -284,7 +284,7 @@ export default function LectureDetailScreen() {
               activeOpacity={0.8}
             >
               <Image source={{ uri: item.uri }} style={styles.photoImage} />
-              {item.timestamp && (
+              {item.timestamp != null && (
                 <View style={styles.photoTimestamp}>
                   <Text style={styles.photoTimestampText}>{item.timestamp}</Text>
                 </View>

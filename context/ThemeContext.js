@@ -45,13 +45,9 @@ export const ThemeProvider = ({ children }) => {
   }, []);
 
   // Save theme preference
-  const setTheme = async (newTheme) => {
-    try {
-      await AsyncStorage.setItem(THEME_STORAGE_KEY, newTheme);
-      setThemeState(newTheme);
-    } catch (error) {
-      console.log('Error saving theme:', error);
-    }
+  const setTheme = (newTheme) => {
+    setThemeState(newTheme);
+    AsyncStorage.setItem(THEME_STORAGE_KEY, newTheme).catch(() => {});
   };
 
   // Toggle between light and dark

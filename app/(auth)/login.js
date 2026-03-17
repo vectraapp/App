@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Feather, AntDesign } from '@expo/vector-icons';
+import { Feather, FontAwesome } from '@expo/vector-icons';
 import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Button, Input } from '../../components/shared';
@@ -173,9 +173,9 @@ export default function LoginScreen() {
               activeOpacity={0.8}
             >
               {googleLoading ? (
-                <AntDesign name="loading1" size={18} color={colors.text.secondary} />
+                <Feather name="loader" size={18} color={colors.text.secondary} />
               ) : (
-                <AntDesign name="google" size={18} color="#EA4335" />
+                <FontAwesome name="google" size={18} color="#EA4335" />
               )}
               <Text style={styles.googleBtnText}>Continue with Google</Text>
             </TouchableOpacity>

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import PagerView from 'react-native-pager-view';
 import {
   View,
   Text,
@@ -19,7 +20,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { FONTS, SIZES, SHADOWS } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Card, EmptyState, Button } from '../../components/shared';
@@ -37,6 +38,7 @@ export default function CourseDetailScreen() {
   const courseCode = decodeURIComponent(id);
 
   const [activeTab, setActiveTab] = useState(0);
+  const pagerRef = useRef(null);
   const [selectedSession, setSelectedSession] = useState('all');
   const [selectedType, setSelectedType] = useState('all');
   const [selectedQuestions, setSelectedQuestions] = useState([]);
@@ -551,7 +553,10 @@ export default function CourseDetailScreen() {
             <TouchableOpacity
               key={tab}
               style={[styles.tab, activeTab === index && styles.tabActive]}
-              onPress={() => setActiveTab(index)}
+              onPress={() => {
+                setActiveTab(index);
+                pagerRef.current?.setPage(index);
+              }}
             >
               <Text style={[styles.tabText, activeTab === index && styles.tabTextActive]}>
                 {tab}
@@ -560,43 +565,44 @@ export default function CourseDetailScreen() {
           ))}
         </View>
 
-        {/* Tab Content */}
-        {activeTab === 0 && renderQuestionsTab()}
-        {activeTab === 1 && renderMaterialsTab()}
-        {activeTab === 2 && renderPdfsTab()}
-        {activeTab === 3 && renderJotTab()}
+        {/* Tab Content — swipeable */}
+        <PagerView
+          ref={pagerRef}
+          style={{ flex: 1 }}
+          initialPage={0}
+          onPageSelected={(e) => setActiveTab(e.nativeEvent.position)}
+        >
+          <View key="0" style={{ flex: 1 }}>{renderQuestionsTab()}</View>
+          <View key="1" style={{ flex: 1 }}>{renderMaterialsTab()}</View>
+          <View key="2" style={{ flex: 1 }}>{renderPdfsTab()}</View>
+          <View key="3" style={{ flex: 1 }}>{renderJotTab()}</View>
+        </PagerView>
 
         {/* Upload shortcuts bar — shown on Questions and Materials tabs */}
+        {/* Upload FAB — above AI FAB, only on Questions and Materials tabs */}
         {(activeTab === 0 || activeTab === 1) && (
-          <View style={styles.uploadBar}>
-            <TouchableOpacity
-              style={styles.uploadBarBtn}
-              onPress={() => router.push({ pathname: '/upload/question', params: { courseCode, courseName: courseCode } })}
-            >
-              <Feather name="upload" size={15} color={colors.brand.secondary} />
-              <Text style={styles.uploadBarBtnText}>Upload Past Question</Text>
-            </TouchableOpacity>
-            <View style={styles.uploadBarDivider} />
-            <TouchableOpacity
-              style={styles.uploadBarBtn}
-              onPress={() => router.push({ pathname: '/upload/textbook', params: { courseCode } })}
-            >
-              <Feather name="book" size={15} color={colors.brand.accent} />
-              <Text style={[styles.uploadBarBtnText, { color: colors.brand.accent }]}>Upload Material</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Floating AI Button - Only on Questions tab */}
-        {activeTab === 0 && (
           <TouchableOpacity
-            style={styles.floatingAIButton}
-            onPress={() => setShowAISheet(true)}
-            activeOpacity={0.8}
+            style={styles.uploadFAB}
+            onPress={() =>
+              router.push({
+                pathname: activeTab === 0 ? '/upload/question' : '/upload/textbook',
+                params: { courseCode, courseName: courseCode },
+              })
+            }
+            activeOpacity={0.85}
           >
-            <Feather name="cpu" size={24} color={colors.background.primary} />
+            <Feather name="upload" size={20} color={colors.white} />
           </TouchableOpacity>
         )}
+
+        {/* Floating AI Button — visible on all tabs */}
+        <TouchableOpacity
+          style={styles.floatingAIButton}
+          onPress={() => setShowAISheet(true)}
+          activeOpacity={0.8}
+        >
+          <Feather name="cpu" size={24} color={colors.background.primary} />
+        </TouchableOpacity>
 
         {/* Filter Modal */}
         <Modal
@@ -916,38 +922,10 @@ const createStyles = (colors) => StyleSheet.create({
     color: colors.brand.primary,
     ...FONTS.semibold,
   },
-  // Upload bar
-  uploadBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.background.secondary,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingVertical: 10,
-    paddingHorizontal: SIZES.padding,
-  },
-  uploadBarBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 6,
-  },
-  uploadBarBtnText: {
-    fontSize: SIZES.sm,
-    color: colors.brand.secondary,
-    ...FONTS.medium,
-  },
-  uploadBarDivider: {
-    width: 1,
-    height: 20,
-    backgroundColor: colors.border,
-  },
   listContent: {
     paddingHorizontal: SIZES.padding,
     paddingTop: 16,
-    paddingBottom: 100,
+    paddingBottom: 160,
   },
   loadingContainer: {
     flex: 1,
@@ -1259,14 +1237,26 @@ const createStyles = (colors) => StyleSheet.create({
     lineHeight: 24,
     ...FONTS.regular,
   },
+  uploadFAB: {
+    position: 'absolute',
+    bottom: 92,
+    right: 20,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.brand.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...SHADOWS.medium,
+  },
   floatingAIButton: {
     position: 'absolute',
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.brand.secondary,
+    bottom: 20,
+    right: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.brand.primary,
     justifyContent: 'center',
     alignItems: 'center',
     ...SHADOWS.medium,
