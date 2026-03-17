@@ -14,7 +14,7 @@ import { Feather } from '@expo/vector-icons';
 import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { EmptyState, Card } from '../../components/shared';
-import api from '../../services/api';
+import { delay, DUMMY_MY_UPLOADS } from '../../services/dummyData';
 
 const STATUS_CONFIG = {
   pending: {
@@ -59,9 +59,8 @@ export default function MyUploadsScreen() {
   const fetchUploads = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const response = await api.getMyUploads();
-      const data = response.data || [];
-      setUploads(Array.isArray(data) ? data : []);
+      await delay(400);
+      setUploads(DUMMY_MY_UPLOADS);
     } catch (err) {
       console.error('Failed to fetch my uploads:', err);
     } finally {

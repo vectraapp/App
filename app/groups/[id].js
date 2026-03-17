@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -17,9 +17,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
-import api from '../../services/api';
-
-const POLL_INTERVAL = 4000; // 4 seconds
+import { delay, DUMMY_GROUPS, DUMMY_GROUP_MESSAGES } from '../../services/dummyData';
 
 export default function GroupChatScreen() {
   const { id, name } = useLocalSearchParams();
@@ -27,7 +25,6 @@ export default function GroupChatScreen() {
   const { colors } = useTheme();
   const styles = createStyles(colors);
   const flatListRef = useRef(null);
-  const pollRef = useRef(null);
 
   const [messages, setMessages] = useState([]);
   const [group, setGroup] = useState(null);
@@ -39,40 +36,29 @@ export default function GroupChatScreen() {
   // Load group details + initial messages
   useEffect(() => {
     loadGroup();
-    loadMessages(true);
-    // Start polling for new messages
-    pollRef.current = setInterval(() => loadMessages(false), POLL_INTERVAL);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [id]);
 
   const loadGroup = async () => {
     try {
-      const response = await api.getGroup(id);
-      setGroup(response.data);
+      await delay(400);
+      const found = DUMMY_GROUPS.find((g) => g.id === id) || DUMMY_GROUPS[0];
+      setGroup(found);
+      // Map DUMMY_GROUP_MESSAGES to the shape this screen uses
+      const msgs = DUMMY_GROUP_MESSAGES.map((m) => ({
+        id: m.id,
+        content: m.message,
+        is_mine: m.is_mine,
+        created_at: m.created_at,
+        display_name: m.sender_name,
+        sender_email: m.sender_email,
+      }));
+      setMessages(msgs);
     } catch {
       // Non-critical
+    } finally {
+      setLoading(false);
     }
   };
-
-  const loadMessages = useCallback(async (initial = false) => {
-    try {
-      const response = await api.getGroupMessages(id, { limit: 60 });
-      const newMessages = response.data || [];
-      setMessages((prev) => {
-        // Only update if there are new messages (avoid re-render on same data)
-        if (initial) return newMessages;
-        if (newMessages.length !== prev.length) return newMessages;
-        const lastNew = newMessages[newMessages.length - 1];
-        const lastPrev = prev[prev.length - 1];
-        if (lastNew?.id !== lastPrev?.id) return newMessages;
-        return prev;
-      });
-    } catch {
-      // Silently fail on poll errors
-    } finally {
-      if (initial) setLoading(false);
-    }
-  }, [id]);
 
   // Scroll to end when new messages arrive
   useEffect(() => {
@@ -87,30 +73,15 @@ export default function GroupChatScreen() {
     setInput('');
     setSending(true);
 
-    // Optimistic update
-    const tempId = `temp_${Date.now()}`;
-    const optimisticMsg = {
-      id: tempId,
+    const newMsg = {
+      id: `msg_${Date.now()}`,
       content: text,
       is_mine: true,
       created_at: new Date().toISOString(),
       display_name: 'You',
     };
-    setMessages((prev) => [...prev, optimisticMsg]);
-
-    try {
-      const response = await api.sendGroupMessage(id, text);
-      // Replace optimistic message with real one
-      setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? response.data : m))
-      );
-    } catch {
-      // Remove optimistic message on failure
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      setInput(text); // Restore input
-    } finally {
-      setSending(false);
-    }
+    setMessages((prev) => [...prev, newMsg]);
+    setSending(false);
   };
 
   const handleShareInvite = async () => {
@@ -136,7 +107,7 @@ export default function GroupChatScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await api.leaveGroup(id);
+              await delay(400);
               router.back();
             } catch (err) {
               Alert.alert('Error', err.message || 'Could not leave group');

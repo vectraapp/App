@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -15,282 +14,74 @@ import { Feather } from '@expo/vector-icons';
 import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Card, EmptyState } from '../../components/shared';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import api from '../../services/api';
-import useAuthStore from '../../store/authStore';
-
-const CACHE_KEY_PREFIX = 'browse_cache_';
-const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+import { DUMMY_COURSES } from '../../services/dummyData';
 
 export default function BrowseScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const getProfile = useAuthStore((s) => s.getProfile);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFaculty, setSelectedFaculty] = useState('all');
   const [selectedDepartment, setSelectedDepartment] = useState('all');
   const [selectedLevel, setSelectedLevel] = useState('all');
-  // API-driven state
-  const [faculties, setFaculties] = useState([]);
-  const [allDepartments, setAllDepartments] = useState([]);
-  const [courses, setCourses] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingFaculties, setLoadingFaculties] = useState(false);
-  const [loadingCourses, setLoadingCourses] = useState(false);
-  const [questionCounts, setQuestionCounts] = useState({});
-  const [userDepartmentId, setUserDepartmentId] = useState(null);
-  const [universityId, setUniversityId] = useState(null);
 
-  const getCachedData = async (universityId) => {
-    try {
-      const raw = await AsyncStorage.getItem(`${CACHE_KEY_PREFIX}${universityId}`);
-      if (!raw) return null;
-      const cached = JSON.parse(raw);
-      if (Date.now() - cached.cachedAt > CACHE_TTL) return null;
-      return cached;
-    } catch { return null; }
-  };
-
-  const setCachedData = async (universityId, data) => {
-    try {
-      await AsyncStorage.setItem(`${CACHE_KEY_PREFIX}${universityId}`, JSON.stringify({
-        ...data,
-        cachedAt: Date.now(),
-      }));
-    } catch { /* silently fail */ }
-  };
-
-  // Load user's university from profile, then fetch faculties
-  useEffect(() => {
-    loadUserUniversity();
+  // Derive departments from DUMMY_COURSES
+  const allDepartments = useMemo(() => {
+    const seen = new Set();
+    const depts = [];
+    DUMMY_COURSES.forEach((c) => {
+      if (!seen.has(c.department)) {
+        seen.add(c.department);
+        depts.push({ id: c.department_id, name: c.department });
+      }
+    });
+    return depts;
   }, []);
 
-  // Load cached question counts on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const cached = await AsyncStorage.getItem('browse_question_counts');
-        if (cached) setQuestionCounts(JSON.parse(cached));
-      } catch {}
-    })();
-  }, []);
-
-  const loadUserUniversity = async () => {
-    try {
-      const profile = await getProfile();
-      const uniId = profile?.universityId || null;
-      const deptId = profile?.departmentId || null;
-      if (deptId) setUserDepartmentId(deptId);
-
-      if (uniId) {
-        setUniversityId(uniId);
-        // Try cache first
-        const cached = await getCachedData(uniId);
-        if (cached) {
-          setFaculties(cached.faculties || []);
-          setAllDepartments(cached.departments || []);
-          setCourses(cached.courses || []);
-          setLoading(false);
-          // Refresh in background
-          refreshData(uniId, true);
-          return;
-        }
-        // No cache - load fresh
-        await fetchFaculties(uniId);
-      } else {
-        try {
-          const response = await api.getUniversities();
-          if (response.success && response.data?.length > 0) {
-            const firstUni = response.data[0];
-            const uid = firstUni.id || firstUni._id;
-            setUniversityId(uid);
-            await fetchFaculties(uid);
-          }
-        } catch (err) {
-          console.error('Failed to load universities:', err);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load user university:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const refreshData = async (uniId, silent = false) => {
-    if (!silent) setLoadingFaculties(true);
-    try {
-      const response = await api.getFaculties(uniId);
-      if (response.success) {
-        const facultyList = response.data || [];
-        setFaculties(facultyList);
-
-        const allDepts = [];
-        for (const fac of facultyList) {
-          const facId = fac.id || fac._id;
-          const deptResp = await api.getDepartments(facId);
-          if (deptResp.success && deptResp.data) {
-            allDepts.push(...deptResp.data.map(d => ({ ...d, facultyId: facId })));
-          }
-        }
-        setAllDepartments(allDepts);
-
-        if (!silent) setLoadingCourses(true);
-        const allCourses = [];
-        for (const dept of allDepts) {
-          const deptId = dept.id || dept._id;
-          const courseResp = await api.getCourses(deptId);
-          if (courseResp.success && courseResp.data) {
-            allCourses.push(...courseResp.data.map(c => ({
-              ...c,
-              departmentId: deptId,
-              departmentName: dept.name || dept.short_name || '',
-              departmentCode: dept.code || dept.short_name || '',
-              facultyId: dept.facultyId,
-            })));
-          }
-        }
-        setCourses(allCourses);
-
-        // Save to cache
-        await setCachedData(uniId, {
-          faculties: facultyList,
-          departments: allDepts,
-          courses: allCourses,
-        });
-      }
-    } catch (err) {
-      console.error('Failed to refresh data:', err);
-    } finally {
-      if (!silent) {
-        setLoadingFaculties(false);
-        setLoadingCourses(false);
-      }
-    }
-  };
-
-  const fetchFaculties = async (uniId) => {
-    await refreshData(uniId, false);
-  };
-
-  // Get all unique levels from loaded courses
+  // Get all unique levels
   const allLevels = useMemo(() => {
     const levels = new Set();
-    courses.forEach((c) => {
-      if (c.level) levels.add(c.level);
-    });
+    DUMMY_COURSES.forEach((c) => { if (c.level) levels.add(c.level); });
     return ['all', ...Array.from(levels).sort()];
-  }, [courses]);
-
-  // Get departments based on selected faculty
-  const availableDepartments = useMemo(() => {
-    let depts = selectedFaculty === 'all'
-      ? allDepartments
-      : allDepartments.filter((d) => {
-          const dFacId = d.facultyId || d.faculty_id;
-          return dFacId === selectedFaculty;
-        });
-
-    // Prioritize user's department
-    if (userDepartmentId) {
-      depts = [...depts].sort((a, b) => {
-        const aId = a.id || a._id;
-        const bId = b.id || b._id;
-        if (aId === userDepartmentId) return -1;
-        if (bId === userDepartmentId) return 1;
-        return 0;
-      });
-    }
-
-    return depts;
-  }, [selectedFaculty, allDepartments, userDepartmentId]);
+  }, []);
 
   // Filter courses
   const filteredCourses = useMemo(() => {
-    let filtered = [...courses];
-
-    // Filter by faculty
-    if (selectedFaculty !== 'all') {
-      const deptIdsInFaculty = availableDepartments.map((d) => d.id || d._id);
-      filtered = filtered.filter((c) => deptIdsInFaculty.includes(c.departmentId));
-    }
-
-    // Filter by department
+    let filtered = [...DUMMY_COURSES];
     if (selectedDepartment !== 'all') {
-      filtered = filtered.filter((c) => c.departmentId === selectedDepartment);
+      filtered = filtered.filter((c) => c.department_id === selectedDepartment);
     }
-
-    // Filter by level
     if (selectedLevel !== 'all') {
       filtered = filtered.filter((c) => c.level === selectedLevel);
     }
-
-    // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter((c) =>
         (c.code || '').toLowerCase().includes(query) ||
-        (c.name || c.title || '').toLowerCase().includes(query) ||
-        (c.departmentName || '').toLowerCase().includes(query)
+        (c.title || '').toLowerCase().includes(query) ||
+        (c.department || '').toLowerCase().includes(query)
       );
     }
-
     return filtered;
-  }, [courses, selectedFaculty, selectedDepartment, selectedLevel, searchQuery, availableDepartments]);
+  }, [selectedDepartment, selectedLevel, searchQuery]);
 
   // Group courses by department
   const groupedCourses = useMemo(() => {
     const groups = {};
     filteredCourses.forEach((course) => {
-      const key = course.departmentName || 'Other';
-      if (!groups[key]) {
-        groups[key] = [];
-      }
+      const key = course.department || 'Other';
+      if (!groups[key]) groups[key] = [];
       groups[key].push(course);
     });
     return Object.entries(groups);
   }, [filteredCourses]);
 
-  const getQuestionCount = (courseCode) => {
-    return questionCounts[courseCode] || 0;
-  };
-
-  // Fetch question count for a course (lazy / on-demand could be added later)
-  const fetchQuestionCount = useCallback(async (courseCode) => {
-    if (questionCounts[courseCode] !== undefined) return;
-    try {
-      const response = await api.getQuestions({ courseCode });
-      if (response.success) {
-        const count = Array.isArray(response.data) ? response.data.length : 0;
-        setQuestionCounts((prev) => {
-          const updated = { ...prev, [courseCode]: count };
-          AsyncStorage.setItem('browse_question_counts', JSON.stringify(updated)).catch(() => {});
-          return updated;
-        });
-      }
-    } catch (err) {
-      // Set to 0 on error to prevent infinite retries
-      setQuestionCounts((prev) => {
-        const updated = { ...prev, [courseCode]: 0 };
-        AsyncStorage.setItem('browse_question_counts', JSON.stringify(updated)).catch(() => {});
-        return updated;
-      });
-    }
-  }, [questionCounts]);
-
   const styles = createStyles(colors);
 
   const renderCourse = (course) => {
-    const courseCode = course.code || course.course_code || '';
-    const courseName = course.name || course.title || '';
+    const courseCode = course.code || '';
+    const courseName = course.title || '';
     const courseLevel = course.level || '';
-    const questionCount = getQuestionCount(courseCode);
-
-    // Lazy-fetch question count when rendering
-    if (questionCounts[courseCode] === undefined) {
-      fetchQuestionCount(courseCode);
-    }
+    const questionCount = course.question_count || 0;
 
     return (
       <TouchableOpacity
@@ -327,16 +118,6 @@ export default function BrowseScreen() {
     </TouchableOpacity>
   );
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-          <ActivityIndicator size="large" color={colors.brand.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
@@ -364,43 +145,9 @@ export default function BrowseScreen() {
 
         {/* Filters */}
         <View style={styles.filtersSection}>
-          {/* Faculty Filter */}
-          <View style={styles.filterRow}>
-            <Text style={styles.filterLabel}>Faculty:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-              <TouchableOpacity
-                style={[styles.filterChip, selectedFaculty === 'all' && styles.filterChipSelected]}
-                onPress={() => {
-                  setSelectedFaculty('all');
-                  setSelectedDepartment('all');
-                }}
-              >
-                <Text style={[styles.filterChipText, selectedFaculty === 'all' && styles.filterChipTextSelected]}>All</Text>
-              </TouchableOpacity>
-              {faculties.map((fac) => {
-                const facId = fac.id || fac._id;
-                const facName = fac.name || fac.short_name || '';
-                return (
-                  <TouchableOpacity
-                    key={facId}
-                    style={[styles.filterChip, selectedFaculty === facId && styles.filterChipSelected]}
-                    onPress={() => {
-                      setSelectedFaculty(facId);
-                      setSelectedDepartment('all');
-                    }}
-                  >
-                    <Text style={[styles.filterChipText, selectedFaculty === facId && styles.filterChipTextSelected]}>
-                      {facName.length > 15 ? facName.substring(0, 15) + '...' : facName}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-
           {/* Department Filter */}
           <View style={styles.filterRow}>
-            <Text style={styles.filterLabel}>Department:</Text>
+            <Text style={styles.filterLabel}>Dept:</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
               <TouchableOpacity
                 style={[styles.filterChip, selectedDepartment === 'all' && styles.filterChipSelected]}
@@ -408,21 +155,17 @@ export default function BrowseScreen() {
               >
                 <Text style={[styles.filterChipText, selectedDepartment === 'all' && styles.filterChipTextSelected]}>All</Text>
               </TouchableOpacity>
-              {availableDepartments.map((dept) => {
-                const deptId = dept.id || dept._id;
-                const deptCode = dept.code || dept.short_name || dept.name || '';
-                return (
-                  <TouchableOpacity
-                    key={deptId}
-                    style={[styles.filterChip, selectedDepartment === deptId && styles.filterChipSelected]}
-                    onPress={() => setSelectedDepartment(deptId)}
-                  >
-                    <Text style={[styles.filterChipText, selectedDepartment === deptId && styles.filterChipTextSelected]}>
-                      {deptCode}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+              {allDepartments.map((dept) => (
+                <TouchableOpacity
+                  key={dept.id}
+                  style={[styles.filterChip, selectedDepartment === dept.id && styles.filterChipSelected]}
+                  onPress={() => setSelectedDepartment(dept.id)}
+                >
+                  <Text style={[styles.filterChipText, selectedDepartment === dept.id && styles.filterChipTextSelected]}>
+                    {dept.name.length > 15 ? dept.name.substring(0, 15) + '...' : dept.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </ScrollView>
           </View>
 
@@ -442,16 +185,12 @@ export default function BrowseScreen() {
         {/* Results Count */}
         <View style={styles.resultsHeader}>
           <Text style={styles.resultsCount}>
-            {loadingCourses ? 'Loading...' : `${filteredCourses.length} course${filteredCourses.length !== 1 ? 's' : ''} found`}
+            {`${filteredCourses.length} course${filteredCourses.length !== 1 ? 's' : ''} found`}
           </Text>
         </View>
 
         {/* Course List */}
-        {loadingCourses ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={colors.brand.primary} />
-          </View>
-        ) : groupedCourses.length > 0 ? (
+        {groupedCourses.length > 0 ? (
           <FlatList
             data={groupedCourses}
             keyExtractor={([key]) => key}
@@ -460,7 +199,7 @@ export default function BrowseScreen() {
                 <Text style={styles.departmentTitle}>{department}</Text>
                 <Card style={styles.coursesCard}>
                   {deptCourses.map((course, index) => (
-                    <View key={(course.id || course._id || course.code) + (course.level || '') + index}>
+                    <View key={(course.id || course.code) + (course.level || '') + index}>
                       {renderCourse(course)}
                       {index < deptCourses.length - 1 && <View style={styles.divider} />}
                     </View>

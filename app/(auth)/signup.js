@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import { Feather, AntDesign } from '@expo/vector-icons';
 import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Button, Input } from '../../components/shared';
@@ -22,6 +22,7 @@ export default function SignupScreen() {
   const { colors } = useTheme();
   const { showToast } = useToast();
   const signup = useAuthStore((s) => s.signup);
+  const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle);
 
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -29,6 +30,7 @@ export default function SignupScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
   const validate = () => {
@@ -70,12 +72,24 @@ export default function SignupScreen() {
     setLoading(true);
     try {
       await signup(email.trim(), password, displayName.trim(), termsAccepted);
-      showToast('success', 'Account created successfully!');
-      router.replace('/(auth)/onboarding');
+      router.replace({ pathname: '/(auth)/verify-email', params: { email: email.trim() } });
     } catch (err) {
       showToast('error', err.message || 'Signup failed. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleSignup = async () => {
+    setGoogleLoading(true);
+    try {
+      await loginWithGoogle();
+      showToast('success', 'Account created with Google!');
+      router.replace('/(auth)/onboarding');
+    } catch (err) {
+      showToast('error', err.message || 'Google sign-up failed. Please try again.');
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -206,6 +220,28 @@ export default function SignupScreen() {
               disabled={!termsAccepted}
               style={styles.signupButton}
             />
+
+            {/* Divider */}
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Google Button */}
+            <TouchableOpacity
+              style={styles.googleBtn}
+              onPress={handleGoogleSignup}
+              disabled={googleLoading}
+              activeOpacity={0.8}
+            >
+              {googleLoading ? (
+                <AntDesign name="loading1" size={18} color={colors.text.secondary} />
+              ) : (
+                <AntDesign name="google" size={18} color="#EA4335" />
+              )}
+              <Text style={styles.googleBtnText}>Continue with Google</Text>
+            </TouchableOpacity>
 
             {/* Login Link */}
             <View style={styles.loginContainer}>
@@ -344,5 +380,38 @@ const createStyles = (colors) => StyleSheet.create({
     fontSize: SIZES.base,
     color: colors.brand.secondary,
     ...FONTS.semibold,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+    gap: 10,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
+    fontSize: SIZES.sm,
+    color: colors.text.inactive,
+    ...FONTS.regular,
+  },
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background.tertiary,
+    marginBottom: 4,
+  },
+  googleBtnText: {
+    fontSize: SIZES.base,
+    color: colors.text.primary,
+    ...FONTS.medium,
   },
 });

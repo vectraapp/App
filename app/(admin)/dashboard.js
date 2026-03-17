@@ -15,7 +15,7 @@ import { FONTS, SIZES } from '../../constants/theme';
 import { Card } from '../../components/shared';
 import { useToast } from '../../components/shared/Toast';
 import { useTheme } from '../../context/ThemeContext';
-import api from '../../services/api';
+import { delay, DUMMY_ADMIN_DASHBOARD } from '../../services/dummyData';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -27,14 +27,8 @@ export default function AdminDashboard() {
 
   const loadDashboard = async () => {
     try {
-      const response = await api.getAdminDashboard();
-      if (response?.success && response?.data) {
-        setStats(response.data);
-      } else if (response?.data) {
-        setStats(response.data);
-      } else {
-        setStats(response);
-      }
+      await delay(500);
+      setStats(DUMMY_ADMIN_DASHBOARD);
     } catch (err) {
       showToast('error', 'Failed to load dashboard data');
     } finally {
@@ -57,28 +51,28 @@ export default function AdminDashboard() {
   const statCards = [
     {
       label: 'Total Users',
-      value: stats?.total_users ?? 0,
+      value: stats?.totalUsers ?? 0,
       icon: 'users',
       color: colors.brand.primary,
       tint: colors.tint.primary,
     },
     {
-      label: 'Pending Questions',
-      value: stats?.pending_questions ?? 0,
+      label: 'Pending Approvals',
+      value: stats?.pendingApprovals ?? 0,
       icon: 'file-text',
       color: colors.brand.warning,
       tint: colors.tint.warning,
     },
     {
-      label: 'Total Uploads',
-      value: stats?.total_uploads ?? 0,
+      label: 'Total Questions',
+      value: stats?.totalQuestions ?? 0,
       icon: 'upload',
       color: colors.brand.accent,
       tint: colors.tint.accent,
     },
     {
       label: 'Total Lectures',
-      value: stats?.total_lectures ?? 0,
+      value: stats?.totalLectures ?? 0,
       icon: 'mic',
       color: colors.brand.secondary,
       tint: colors.tint.secondary,

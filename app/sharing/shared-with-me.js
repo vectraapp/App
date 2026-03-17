@@ -14,7 +14,7 @@ import { Feather } from '@expo/vector-icons';
 import { FONTS, SIZES } from '../../constants/theme';
 import { Card } from '../../components/shared';
 import { useTheme } from '../../context/ThemeContext';
-import api from '../../services/api';
+import { delay, DUMMY_SHARED_WITH_ME } from '../../services/dummyData';
 
 export default function SharedWithMeScreen() {
   const router = useRouter();
@@ -29,16 +29,16 @@ export default function SharedWithMeScreen() {
 
   const loadSharedItems = async () => {
     try {
-      const response = await api.getSharedWithMe();
-      const mapped = (response.data || []).map(item => ({
+      await delay(400);
+      const mapped = DUMMY_SHARED_WITH_ME.map(item => ({
         id: item.id,
-        title: item.share_code?.resource_metadata?.topic || item.share_code?.resource_metadata?.name || 'Shared Content',
-        course: item.share_code?.resource_metadata?.courseCode || item.share_code?.resource_metadata?.course_code || '',
-        sharedBy: item.share_code?.creator_email || 'Unknown',
+        title: item.resource_title,
+        course: item.course_code,
+        sharedBy: item.shared_by_email,
         sharedAt: new Date(item.redeemed_at),
-        expiresAt: item.share_code?.expires_at ? new Date(item.share_code.expires_at) : null,
-        type: item.share_code?.code_type || 'lecture',
-        resourceId: item.copied_resource_id,
+        expiresAt: null,
+        type: item.resource_type,
+        resourceId: item.resource_id,
       }));
       setSharedItems(mapped);
     } catch (error) {

@@ -56,8 +56,15 @@ export const ThemeProvider = ({ children }) => {
 
   // Toggle between light and dark
   const toggleTheme = () => {
-    const newTheme = isDark ? 'light' : 'dark';
-    setTheme(newTheme);
+    // Read current isDark from state rather than closure to avoid stale value
+    setThemeState((prev) => {
+      const currentIsDark = prev === 'auto'
+        ? systemColorScheme === 'dark'
+        : prev === 'dark';
+      const next = currentIsDark ? 'light' : 'dark';
+      AsyncStorage.setItem(THEME_STORAGE_KEY, next).catch(() => {});
+      return next;
+    });
   };
 
   // Determine if dark mode should be active

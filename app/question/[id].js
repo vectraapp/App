@@ -6,7 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import PDFViewer from '../../components/viewers/PDFViewer';
-import api from '../../services/api';
+import { delay, DUMMY_QUESTIONS } from '../../services/dummyData';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -182,10 +182,21 @@ export default function QuestionViewScreen() {
   const fetchQuestion = async () => {
     try {
       setLoading(true);
-      const response = await api.getQuestion(id);
-      if (response.success) {
-        setQuestion(mapQuestion(response.data));
-      }
+      await delay(400);
+      const found = DUMMY_QUESTIONS.find((q) => q.id === id) || DUMMY_QUESTIONS[0];
+      // Map to the shape this screen expects
+      setQuestion({
+        id: found.id,
+        courseCode: found.courseCode,
+        title: `${found.courseCode} ${found.examType} ${found.session}`,
+        session: found.session,
+        semester: '',
+        type: found.examType,
+        pages: null,
+        imageUrl: found.fileUrl || null,
+        level: '',
+        hasAccess: true,
+      });
     } catch (err) {
       console.error('Failed to load question:', err);
     } finally {

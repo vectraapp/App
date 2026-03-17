@@ -11,10 +11,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Card, EmptyState } from '../../components/shared';
-import api from '../../services/api';
+import { delay, DUMMY_LECTURES } from '../../services/dummyData';
 
 function formatDuration(seconds) {
   const mins = Math.floor(seconds / 60);
@@ -58,13 +59,21 @@ export default function LecturesScreen() {
   const fetchLectures = async () => {
     try {
       setLoading(true);
-      const response = await api.getLectures();
-      if (response.success) {
-        const mapped = (response.data || []).map(mapLecture);
-        setLectures(mapped);
-      }
+      await delay(300);
+      // Merge locally recorded lectures (AsyncStorage) with dummy data
+      const localJson = await AsyncStorage.getItem('local_lectures');
+      const localLectures = localJson ? JSON.parse(localJson) : [];
+      // local lectures are already in backend snake_case format, dummy needs mapping
+      const mapped = DUMMY_LECTURES.map(mapLecture);
+      // local lectures: map them too but preserve audio_url as local uri
+      const mappedLocal = localLectures.map((item) => ({
+        ...mapLecture(item),
+        audioUrl: item.audio_url, // local file URI
+      }));
+      setLectures([...mappedLocal, ...mapped]);
     } catch (err) {
       console.error('Failed to load lectures:', err);
+      setLectures(DUMMY_LECTURES.map(mapLecture));
     } finally {
       setLoading(false);
     }
@@ -140,29 +149,7 @@ export default function LecturesScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Lectures</Text>
-          <TouchableOpacity
-            style={styles.recordButton}
-            onPress={() => router.push('/lecture/select-course')}
-          >
-            <Feather name="plus" size={20} color={colors.background.primary} />
-            <Text style={styles.recordButtonText}>Record</Text>
-          </TouchableOpacity>
         </View>
-
-        {/* Study Groups banner */}
-        <TouchableOpacity
-          style={[styles.groupsBanner, { backgroundColor: colors.tint.accent }]}
-          onPress={() => router.push('/groups/index')}
-          activeOpacity={0.85}
-        >
-          <View style={styles.groupsBannerLeft}>
-            <Feather name="users" size={16} color={colors.brand.accent} />
-            <Text style={[styles.groupsBannerTitle, { color: colors.brand.accent }]}>Study Groups</Text>
-          </View>
-          <Text style={[styles.groupsBannerSub, { color: colors.brand.accent }]}>
-            Join or create a group →
-          </Text>
-        </TouchableOpacity>
 
         {/* Lecture List */}
         {loading ? (
@@ -174,18 +161,26 @@ export default function LecturesScreen() {
             data={lectures}
             renderItem={renderLecture}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, { paddingBottom: 100 }]}
             showsVerticalScrollIndicator={false}
           />
         ) : (
           <EmptyState
             icon="mic"
             title="No lectures recorded"
-            message="Start recording your lectures to get AI-powered notes and summaries."
-            actionLabel="Record Lecture"
-            onAction={() => router.push('/lecture/select-course')}
+            message="Tap the red button to record your first lecture."
           />
         )}
+
+        {/* Floating record button */}
+        <TouchableOpacity
+          style={styles.recordFAB}
+          onPress={() => router.push('/lecture/select-course')}
+          activeOpacity={0.85}
+        >
+          <Feather name="mic" size={22} color={colors.white} />
+          <Text style={styles.recordFABText}>Record</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -220,19 +215,27 @@ const createStyles = (colors) => StyleSheet.create({
     color: colors.text.primary,
     ...FONTS.bold,
   },
-  recordButton: {
+  recordFAB: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.brand.secondary,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: SIZES.radiusSm,
+    backgroundColor: colors.brand.error,
+    borderRadius: 30,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    gap: 8,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
-  recordButtonText: {
-    fontSize: SIZES.md,
-    color: colors.background.primary,
-    marginLeft: 6,
-    ...FONTS.semibold,
+  recordFABText: {
+    fontSize: SIZES.base,
+    color: colors.white,
+    ...FONTS.bold,
   },
   listContent: {
     paddingHorizontal: SIZES.padding * 1.5,
@@ -320,18 +323,4 @@ const createStyles = (colors) => StyleSheet.create({
     top: 16,
     right: 16,
   },
-  groupsBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginHorizontal: SIZES.padding * 1.5,
-    marginTop: 12,
-    marginBottom: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: SIZES.radius,
-  },
-  groupsBannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  groupsBannerTitle: { fontSize: SIZES.sm, ...FONTS.semibold },
-  groupsBannerSub: { fontSize: SIZES.xs, ...FONTS.regular },
 });

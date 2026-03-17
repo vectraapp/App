@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import { Feather, AntDesign } from '@expo/vector-icons';
 import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Button, Input } from '../../components/shared';
@@ -22,10 +22,12 @@ export default function LoginScreen() {
   const { colors } = useTheme();
   const { showToast } = useToast();
   const login = useAuthStore((s) => s.login);
+  const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
   const validate = () => {
@@ -65,6 +67,27 @@ export default function LoginScreen() {
       showToast('error', err.message || 'Login failed. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
+    try {
+      await loginWithGoogle();
+      showToast('success', 'Signed in with Google!');
+      const { onboardingCompleted, user: loggedInUser } = useAuthStore.getState();
+      const userRole = loggedInUser?.role || 'user';
+      if (userRole === 'admin' || userRole === 'super_admin') {
+        router.replace('/(admin)/dashboard');
+      } else if (onboardingCompleted) {
+        router.replace('/(tabs)/my-courses');
+      } else {
+        router.replace('/(auth)/onboarding');
+      }
+    } catch (err) {
+      showToast('error', err.message || 'Google sign-in failed. Please try again.');
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -134,6 +157,28 @@ export default function LoginScreen() {
               loading={loading}
               style={styles.loginButton}
             />
+
+            {/* Divider */}
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Google Button */}
+            <TouchableOpacity
+              style={styles.googleBtn}
+              onPress={handleGoogleLogin}
+              disabled={googleLoading}
+              activeOpacity={0.8}
+            >
+              {googleLoading ? (
+                <AntDesign name="loading1" size={18} color={colors.text.secondary} />
+              ) : (
+                <AntDesign name="google" size={18} color="#EA4335" />
+              )}
+              <Text style={styles.googleBtnText}>Continue with Google</Text>
+            </TouchableOpacity>
 
             {/* Sign Up Link */}
             <View style={styles.signupContainer}>
@@ -230,6 +275,39 @@ const createStyles = (colors) => StyleSheet.create({
   forgotPasswordText: {
     fontSize: SIZES.sm,
     color: colors.brand.secondary,
+    ...FONTS.medium,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+    gap: 10,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
+    fontSize: SIZES.sm,
+    color: colors.text.inactive,
+    ...FONTS.regular,
+  },
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background.tertiary,
+    marginBottom: 4,
+  },
+  googleBtnText: {
+    fontSize: SIZES.base,
+    color: colors.text.primary,
     ...FONTS.medium,
   },
 });

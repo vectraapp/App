@@ -19,7 +19,7 @@ import { FONTS, SIZES } from '../../constants/theme';
 import { Card, EmptyState } from '../../components/shared';
 import { useToast } from '../../components/shared/Toast';
 import { useTheme } from '../../context/ThemeContext';
-import api from '../../services/api';
+import { delay, DUMMY_PENDING_UPLOADS } from '../../services/dummyData';
 import PDFViewer from '../../components/viewers/PDFViewer';
 
 export default function AdminUploads() {
@@ -55,16 +55,8 @@ export default function AdminUploads() {
 
   const loadUploads = async () => {
     try {
-      const response = await api.getPendingUploads();
-      if (response?.success && Array.isArray(response?.data)) {
-        setUploads(response.data);
-      } else if (Array.isArray(response?.data)) {
-        setUploads(response.data);
-      } else if (Array.isArray(response)) {
-        setUploads(response);
-      } else {
-        setUploads([]);
-      }
+      await delay(400);
+      setUploads(DUMMY_PENDING_UPLOADS);
     } catch (err) {
       showToast('error', 'Failed to load pending uploads');
     } finally {
@@ -85,9 +77,9 @@ export default function AdminUploads() {
   const handleApprove = async (id) => {
     setActionLoading(id);
     try {
-      await api.approveUpload(id);
+      await delay(600);
+      setUploads((prev) => prev.filter((u) => u.id !== id));
       showToast('success', 'Upload approved successfully');
-      loadUploads();
     } catch (err) {
       showToast('error', 'Failed to approve upload');
     } finally {
@@ -111,9 +103,9 @@ export default function AdminUploads() {
             }
             setActionLoading(id);
             try {
-              await api.rejectUpload(id, reason.trim());
+              await delay(600);
+              setUploads((prev) => prev.filter((u) => u.id !== id));
               showToast('success', 'Upload rejected');
-              loadUploads();
             } catch (err) {
               showToast('error', 'Failed to reject upload');
             } finally {

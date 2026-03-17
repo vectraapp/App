@@ -16,8 +16,8 @@ import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Button, Card } from '../../components/shared';
 import { useToast } from '../../components/shared/Toast';
-import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
+import { delay, DUMMY_SESSIONS } from '../../services/dummyData';
 
 export default function UploadQuestionScreen() {
   const router = useRouter();
@@ -46,12 +46,9 @@ export default function UploadQuestionScreen() {
 
   const fetchSessions = async () => {
     try {
-      const response = await api.getSessions();
-      if (response.success) {
-        setSessions(response.data?.sessions || []);
-      }
+      await delay(300);
+      setSessions(DUMMY_SESSIONS.map((s) => s.value));
     } catch (err) {
-      // Hardcode fallback
       setSessions(['2021/2022', '2022/2023', '2023/2024', '2024/2025', '2025/2026']);
     }
   };
@@ -114,20 +111,7 @@ export default function UploadQuestionScreen() {
 
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', {
-        uri: selectedFile.uri,
-        type: selectedFile.mimeType || 'application/pdf',
-        name: selectedFile.name || 'question.pdf',
-      });
-      formData.append('course_code', courseCode.trim().toUpperCase());
-      if (courseName.trim()) formData.append('course_name', courseName.trim());
-      formData.append('academic_session', session);
-      if (semester) formData.append('semester', semester);
-      formData.append('exam_type', examType);
-      if (description.trim()) formData.append('description', description.trim());
-
-      await api.uploadPastQuestion(formData);
+      await delay(1500);
       showToast('success', 'Question uploaded successfully! It will be reviewed before publishing.');
       router.back();
     } catch (err) {

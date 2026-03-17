@@ -22,7 +22,8 @@ import { useTheme } from '../../context/ThemeContext';
 import { Card } from '../../components/shared';
 import ShareLectureSheet from '../../components/sharing/ShareLectureSheet';
 import ShareCodeModal from '../../components/sharing/ShareCodeModal';
-import api from '../../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { delay, DUMMY_LECTURES } from '../../services/dummyData';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PHOTO_SIZE = (SCREEN_WIDTH - SIZES.padding * 3 - 8) / 3;
@@ -99,12 +100,23 @@ export default function LectureDetailScreen() {
   const fetchLecture = async () => {
     try {
       setLoading(true);
-      const response = await api.getLecture(id);
-      if (response.success) {
-        setLecture(mapLecture(response.data));
+      await delay(300);
+
+      // First check AsyncStorage for locally recorded lectures
+      const localJson = await AsyncStorage.getItem('local_lectures');
+      const localLectures = localJson ? JSON.parse(localJson) : [];
+      const localFound = localLectures.find((l) => l.id === id);
+      if (localFound) {
+        setLecture(mapLecture({ ...localFound, audio_url: localFound.audio_url }));
+        return;
       }
+
+      // Fall back to dummy data
+      const found = DUMMY_LECTURES.find((l) => l.id === id) || DUMMY_LECTURES[0];
+      setLecture(mapLecture(found));
     } catch (err) {
       console.error('Failed to load lecture:', err);
+      setLecture(mapLecture(DUMMY_LECTURES[0]));
     } finally {
       setLoading(false);
     }
@@ -112,21 +124,10 @@ export default function LectureDetailScreen() {
 
   const handleShare = async (shareData) => {
     try {
-      const response = await api.createShareCode({
-        resource_type: 'lecture',
-        resource_id: lecture.id,
-        expiry_days: shareData.expiryDays,
-        content_types: shareData.contentTypes,
-      });
-      if (response.success && response.data?.code) {
-        const code = response.data.code;
-        const deepLink = `vectra://sharing/preview?code=${code}`;
-        setShareModalData({
-          code,
-          link: deepLink,
-          expiresAt: response.data.expires_at,
-        });
-      }
+      await delay(600);
+      const code = 'DEMO01';
+      const deepLink = `vectra://sharing/preview?code=${code}`;
+      setShareModalData({ code, link: deepLink, expiresAt: null });
       setShowShareSheet(false);
     } catch (err) {
       console.error('Share failed:', err);

@@ -5,11 +5,19 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Button } from '../../components/shared';
 import { useToast } from '../../components/shared/Toast';
-import api from '../../services/api';
+import { delay } from '../../services/dummyData';
+
+const PROCESSING_STEPS = [
+  { id: 'transcribe', label: 'Transcribing audio...', icon: 'mic', duration: 2200 },
+  { id: 'organize', label: 'Organizing notes...', icon: 'file-text', duration: 1600 },
+  { id: 'pdf', label: 'Generating PDF...', icon: 'download', duration: 1200 },
+  { id: 'save', label: 'Saving lecture...', icon: 'check-circle', duration: 700 },
+];
 
 export default function RecordScreen() {
   const { courseCode, courseName, courseId } = useLocalSearchParams();
@@ -29,14 +37,14 @@ export default function RecordScreen() {
   // Lecture details
   const [topic, setTopic] = useState('');
   const [lecturer, setLecturer] = useState('');
-  const [showDetails, setShowDetails] = useState(true);
 
   // Images/Pictures
   const [images, setImages] = useState([]);
 
   // Processing state
   const [isProcessing, setIsProcessing] = useState(false);
-  const [processingStatus, setProcessingStatus] = useState('');
+  const [processingStep, setProcessingStep] = useState(-1); // index into PROCESSING_STEPS
+  const [completedSteps, setCompletedSteps] = useState([]);
 
   const timerRef = useRef(null);
 
@@ -168,7 +176,6 @@ export default function RecordScreen() {
       setRecording(newRecording);
       setIsRecording(true);
       setIsPaused(false);
-      setShowDetails(false);
 
       // Start timer
       timerRef.current = setInterval(() => {
@@ -212,14 +219,8 @@ export default function RecordScreen() {
     if (!recording) return;
 
     try {
-      console.log('[Recording] Stopping...');
+      if (timerRef.current) clearInterval(timerRef.current);
 
-      // Stop timer
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-
-      // Stop recording
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
       setRecordingUri(uri);
@@ -227,140 +228,69 @@ export default function RecordScreen() {
       setIsRecording(false);
       setIsPaused(false);
 
-      console.log('[Recording] Saved to:', uri);
-      showToast('success', 'Recording saved!');
-
-      // Ask user if they want to process now
-      Alert.alert(
-        'Recording Complete',
-        'Would you like to process this recording now? AI will transcribe and structure your notes.',
-        [
-          {
-            text: 'Later',
-            style: 'cancel',
-            onPress: () => saveWithoutProcessing(uri),
-          },
-          {
-            text: 'Process Now',
-            onPress: () => processRecording(uri),
-          },
-        ]
-      );
+      // Auto-process immediately, no alert
+      processAndSaveRecording(uri);
     } catch (error) {
       console.error('[Recording] Failed to stop:', error);
       showToast('error', 'Failed to stop recording: ' + error.message);
     }
   };
 
-  const saveWithoutProcessing = async (uri) => {
+  const processAndSaveRecording = async (uri) => {
+    setIsProcessing(true);
+    setCompletedSteps([]);
+    setProcessingStep(0);
+
     try {
-      setIsProcessing(true);
-      setProcessingStatus('Saving lecture...');
+      for (let i = 0; i < PROCESSING_STEPS.length; i++) {
+        setProcessingStep(i);
+        await delay(PROCESSING_STEPS[i].duration);
+        setCompletedSteps((prev) => [...prev, i]);
+      }
 
-      // Create lecture in backend
-      const lectureResponse = await api.createLecture({
-        course_code: courseCode,
-        course_name: courseName,
+      const newId = `local_${Date.now()}`;
+      const now = new Date();
+
+      // Build simulated transcript and notes
+      const simulatedTranscript = `[Lecture transcript for "${topic}"]\n\nThis lecture was recorded on ${now.toLocaleDateString()} and has been automatically transcribed.\n\nThe lecture covers key concepts in ${topic}, including definitions, examples, and practical applications as presented by ${lecturer || 'the lecturer'}.`;
+
+      const simulatedNotes = `# ${topic}\n\n**Course:** ${courseCode || 'Unknown'} — ${courseName || ''}\n**Lecturer:** ${lecturer || 'N/A'}\n**Date:** ${now.toLocaleDateString()}\n\n## Overview\nThis lecture introduces ${topic} with core concepts and examples.\n\n## Key Points\n- Definitions and terminology\n- Foundational principles\n- Worked examples\n- Summary and revision tips\n\n## Notes\nFull notes are based on the recorded audio. Review the transcript for detailed content.`;
+
+      const newLecture = {
+        id: newId,
+        course_code: courseCode || '',
+        course_name: courseName || '',
         topic: topic.trim(),
-        lecturer: lecturer.trim() || null,
-        date: new Date().toISOString().split('T')[0],
+        lecturer: lecturer.trim() || 'Unknown',
+        date: now.toISOString(),
         duration: seconds,
-      });
+        status: 'processed',
+        is_favorite: false,
+        audio_url: uri,
+        transcript: simulatedTranscript,
+        structured_markdown: simulatedNotes,
+        images: images.map((imgUri, idx) => ({
+          id: `img_${newId}_${idx}`,
+          image_url: imgUri,
+          order_index: idx,
+        })),
+        created_at: now.toISOString(),
+        _isLocal: true, // flag for future sync
+      };
 
-      if (!lectureResponse.success) {
-        throw new Error(lectureResponse.message || 'Failed to save lecture');
-      }
+      // Save to AsyncStorage (local device storage)
+      const existing = await AsyncStorage.getItem('local_lectures');
+      const localLectures = existing ? JSON.parse(existing) : [];
+      localLectures.unshift(newLecture);
+      await AsyncStorage.setItem('local_lectures', JSON.stringify(localLectures));
 
-      const lectureId = lectureResponse.data.id;
-
-      // Upload images if any
-      if (images.length > 0) {
-        setProcessingStatus('Uploading images...');
-        try {
-          await api.uploadLectureImages(lectureId, images);
-          console.log('[Save] Images uploaded');
-        } catch (imgError) {
-          console.warn('[Save] Image upload failed:', imgError.message);
-          // Continue even if image upload fails
-        }
-      }
-
-      showToast('success', 'Lecture saved! You can process it later.');
-      router.back();
+      showToast('success', 'Lecture saved!');
+      router.replace(`/lecture/${newId}`);
     } catch (error) {
-      console.error('[Save] Error:', error);
-      showToast('error', 'Failed to save: ' + error.message);
-    } finally {
+      console.error('[Record] Save error:', error);
+      showToast('error', 'Failed to save lecture: ' + error.message);
       setIsProcessing(false);
-      setProcessingStatus('');
-    }
-  };
-
-  const processRecording = async (uri) => {
-    try {
-      setIsProcessing(true);
-      setProcessingStatus('Creating lecture...');
-
-      // Step 1: Create lecture in backend
-      const lectureResponse = await api.createLecture({
-        course_code: courseCode,
-        course_name: courseName,
-        topic: topic.trim(),
-        lecturer: lecturer.trim() || null,
-        date: new Date().toISOString().split('T')[0],
-        duration: seconds,
-      });
-
-      if (!lectureResponse.success) {
-        throw new Error(lectureResponse.message || 'Failed to create lecture');
-      }
-
-      const lectureId = lectureResponse.data.id;
-      console.log('[Process] Lecture created:', lectureId);
-
-      // Step 2: Upload audio
-      setProcessingStatus('Uploading audio...');
-      const uploadResponse = await api.uploadAudio(lectureId, { uri });
-
-      if (!uploadResponse.success) {
-        throw new Error(uploadResponse.message || 'Failed to upload audio');
-      }
-
-      console.log('[Process] Audio uploaded');
-
-      // Step 2.5: Upload images if any
-      if (images.length > 0) {
-        setProcessingStatus(`Uploading ${images.length} image(s)...`);
-        try {
-          await api.uploadLectureImages(lectureId, images);
-          console.log('[Process] Images uploaded');
-        } catch (imgError) {
-          console.warn('[Process] Image upload failed:', imgError.message);
-          // Continue even if image upload fails
-        }
-      }
-
-      // Step 3: Trigger AI processing
-      setProcessingStatus('Starting AI processing...');
-      const processResponse = await api.processLecture(lectureId);
-
-      if (!processResponse.success) {
-        throw new Error(processResponse.message || 'Failed to start processing');
-      }
-
-      console.log('[Process] AI processing started');
-
-      showToast('success', 'Processing started! Check back in a few minutes.');
-      router.replace(`/lecture/${lectureId}`);
-    } catch (error) {
-      console.error('[Process] Error:', error);
-      showToast('error', 'Processing failed: ' + error.message);
-
-      // Still go back but show error
-      setTimeout(() => router.back(), 2000);
-    } finally {
-      setIsProcessing(false);
-      setProcessingStatus('');
+      setProcessingStep(-1);
     }
   };
 
@@ -381,7 +311,6 @@ export default function RecordScreen() {
     setIsRecording(false);
     setIsPaused(false);
     setSeconds(0);
-    setShowDetails(true);
     showToast('info', 'Recording cancelled');
   };
 
@@ -402,10 +331,39 @@ export default function RecordScreen() {
       <SafeAreaView style={styles.safe}>
         <View style={styles.centerContainer}>
           <View style={styles.processingIndicator}>
-            <Feather name="loader" size={32} color={colors.brand.primary} />
+            <Feather name="cpu" size={32} color={colors.brand.primary} />
           </View>
-          <Text style={styles.processingTitle}>Processing Recording</Text>
-          <Text style={styles.processingStatus}>{processingStatus}</Text>
+          <Text style={styles.processingTitle}>Processing Lecture</Text>
+          <Text style={styles.processingSubtitle}>Please keep the app open</Text>
+
+          <View style={styles.stepsList}>
+            {PROCESSING_STEPS.map((step, idx) => {
+              const isDone = completedSteps.includes(idx);
+              const isActive = processingStep === idx && !isDone;
+              return (
+                <View key={step.id} style={styles.stepRow}>
+                  <View style={[
+                    styles.stepIconWrap,
+                    isDone && { backgroundColor: colors.tint.accent },
+                    isActive && { backgroundColor: colors.tint.primary },
+                  ]}>
+                    <Feather
+                      name={isDone ? 'check' : step.icon}
+                      size={16}
+                      color={isDone ? colors.brand.accent : isActive ? colors.brand.primary : colors.text.inactive}
+                    />
+                  </View>
+                  <Text style={[
+                    styles.stepLabel,
+                    isDone && { color: colors.brand.accent },
+                    isActive && { color: colors.text.primary },
+                  ]}>
+                    {step.label}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -442,9 +400,10 @@ export default function RecordScreen() {
           <View style={{ width: 40 }} />
         </View>
 
-        <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-          {/* Lecture Details (before recording) */}
-          {showDetails && (
+        {/* Scrollable details (inputs + images) */}
+        <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
+          {/* Lecture Details (shown before recording starts) */}
+          {!isRecording && (
             <View style={styles.detailsSection}>
               <Text style={styles.sectionTitle}>Lecture Details</Text>
 
@@ -469,114 +428,107 @@ export default function RecordScreen() {
                   onChangeText={setLecturer}
                 />
               </View>
+            </View>
+          )}
 
-              {/* Pictures Section */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Pictures (optional)</Text>
-                <Text style={styles.inputHint}>Add photos of slides, whiteboard, or notes</Text>
-
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.imagesScroll}
-                  contentContainerStyle={styles.imagesContainer}
-                >
-                  {images.map((uri, index) => (
-                    <View key={index} style={styles.imageWrapper}>
-                      <Image source={{ uri }} style={styles.imageThumbnail} />
-                      <TouchableOpacity
-                        style={styles.removeImageBtn}
-                        onPress={() => removeImage(index)}
-                      >
-                        <Feather name="x" size={14} color={colors.white} />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-
-                  {images.length < 10 && (
-                    <TouchableOpacity style={styles.addImageBtn} onPress={showImageOptions}>
-                      <Feather name="plus" size={24} color={colors.brand.primary} />
-                      <Text style={styles.addImageText}>Add</Text>
-                    </TouchableOpacity>
-                  )}
-                </ScrollView>
-
-                {images.length > 0 && (
-                  <Text style={styles.imageCount}>{images.length}/10 images</Text>
-                )}
+          {/* During recording: show topic + status */}
+          {isRecording && (
+            <View style={styles.recordingInfo}>
+              <Text style={styles.recordingTopic} numberOfLines={1}>{topic}</Text>
+              <View style={styles.recordingStatusRow}>
+                <View style={[styles.recordingDot, isPaused && styles.recordingDotPaused]} />
+                <Text style={[styles.recordingStatusText, isPaused && { color: colors.brand.warning }]}>
+                  {isPaused ? 'Paused' : 'Recording...'}
+                </Text>
               </View>
             </View>
           )}
 
-          {/* Recording Area */}
-          <View style={styles.recordingArea}>
-            <Text style={styles.timer}>{formatTime(seconds)}</Text>
-
-            <View style={styles.waveformPlaceholder}>
-              {isRecording ? (
-                <View style={styles.recordingIndicator}>
-                  <View style={[styles.recordingDot, isPaused && styles.recordingDotPaused]} />
-                  <Text style={styles.recordingText}>
-                    {isPaused ? 'Paused' : 'Recording...'}
-                  </Text>
-                </View>
-              ) : (
-                <Text style={styles.idleText}>
-                  {topic ? 'Tap the button to start recording' : 'Enter topic above, then start recording'}
-                </Text>
+          {/* Pictures Section — visible always */}
+          <View style={styles.inputGroup}>
+            <View style={styles.picturesHeader}>
+              <Text style={styles.inputLabel}>Pictures</Text>
+              {images.length > 0 && (
+                <Text style={styles.imageCount}>{images.length}/10</Text>
               )}
             </View>
-
-            {/* Control Buttons */}
-            <View style={styles.controlsRow}>
-              {isRecording && (
-                <TouchableOpacity style={styles.secondaryBtn} onPress={pauseRecording}>
-                  <Feather name={isPaused ? 'play' : 'pause'} size={24} color={colors.text.primary} />
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                style={[
-                  styles.recordBtn,
-                  isRecording && styles.recordBtnActive,
-                  !topic.trim() && !isRecording && styles.recordBtnDisabled,
-                ]}
-                onPress={isRecording ? stopRecording : startRecording}
-                disabled={!topic.trim() && !isRecording}
-                activeOpacity={0.8}
-              >
-                <View style={isRecording ? styles.stopIcon : styles.micIcon}>
-                  {isRecording ? null : (
-                    <Feather name="mic" size={32} color={colors.white} />
-                  )}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.imagesScroll}
+              contentContainerStyle={styles.imagesContainer}
+            >
+              {images.map((uri, index) => (
+                <View key={index} style={styles.imageWrapper}>
+                  <Image source={{ uri }} style={styles.imageThumbnail} />
+                  <TouchableOpacity
+                    style={styles.removeImageBtn}
+                    onPress={() => removeImage(index)}
+                  >
+                    <Feather name="x" size={14} color={colors.white} />
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
+              ))}
 
-              {isRecording && (
-                <TouchableOpacity style={styles.secondaryBtn} onPress={cancelRecording}>
-                  <Feather name="x" size={24} color={colors.brand.error} />
+              {images.length < 10 && (
+                <TouchableOpacity style={styles.addImageBtn} onPress={showImageOptions}>
+                  <Feather name="camera" size={22} color={colors.brand.primary} />
+                  <Text style={styles.addImageText}>Add Photo</Text>
                 </TouchableOpacity>
               )}
-            </View>
-
-            <Text style={styles.recordLabel}>
-              {isRecording
-                ? 'Tap red button to stop'
-                : topic.trim()
-                ? 'Tap to start recording'
-                : 'Enter topic first'}
-            </Text>
-          </View>
-
-          {/* Info */}
-          <View style={styles.infoBox}>
-            <Feather name="info" size={14} color={colors.text.muted} />
-            <Text style={styles.infoText}>
-              Your recording will be transcribed by AI (Whisper) and structured into organized notes.
-              This usually takes 1-3 minutes after recording.
-            </Text>
+            </ScrollView>
           </View>
         </ScrollView>
+
+        {/* Fixed bottom record controls */}
+        <View style={styles.bottomControls}>
+          <Text style={styles.timer}>{formatTime(seconds)}</Text>
+
+          <View style={styles.controlsRow}>
+            {/* Pause/Resume — only when recording */}
+            {isRecording ? (
+              <TouchableOpacity style={styles.secondaryBtn} onPress={pauseRecording}>
+                <Feather name={isPaused ? 'play' : 'pause'} size={24} color={colors.text.primary} />
+              </TouchableOpacity>
+            ) : (
+              <View style={{ width: 50 }} />
+            )}
+
+            {/* Main record button */}
+            <TouchableOpacity
+              style={[
+                styles.recordBtn,
+                !topic.trim() && !isRecording && styles.recordBtnDisabled,
+              ]}
+              onPress={isRecording ? stopRecording : startRecording}
+              disabled={!topic.trim() && !isRecording}
+              activeOpacity={0.8}
+            >
+              {isRecording ? (
+                <View style={styles.stopIcon} />
+              ) : (
+                <Feather name="mic" size={32} color={colors.white} />
+              )}
+            </TouchableOpacity>
+
+            {/* Cancel — only when recording */}
+            {isRecording ? (
+              <TouchableOpacity style={styles.secondaryBtn} onPress={cancelRecording}>
+                <Feather name="x" size={24} color={colors.brand.error} />
+              </TouchableOpacity>
+            ) : (
+              <View style={{ width: 50 }} />
+            )}
+          </View>
+
+          <Text style={styles.recordLabel}>
+            {isRecording
+              ? (isPaused ? 'Tap mic to resume' : 'Tap square to stop')
+              : topic.trim()
+              ? 'Tap mic to start recording'
+              : 'Enter a topic first'}
+          </Text>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -615,13 +567,37 @@ const createStyles = (colors) => StyleSheet.create({
   processingTitle: {
     fontSize: SIZES.lg,
     color: colors.text.primary,
-    marginBottom: 8,
+    marginBottom: 6,
     ...FONTS.semibold,
   },
-  processingStatus: {
+  processingSubtitle: {
     fontSize: SIZES.sm,
     color: colors.text.muted,
+    marginBottom: 32,
     ...FONTS.regular,
+  },
+  stepsList: {
+    width: '100%',
+    paddingHorizontal: 20,
+    gap: 14,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  stepIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.background.tertiary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepLabel: {
+    fontSize: SIZES.base,
+    color: colors.text.inactive,
+    ...FONTS.medium,
   },
   header: {
     flexDirection: 'row',
@@ -661,9 +637,10 @@ const createStyles = (colors) => StyleSheet.create({
   },
   contentContainer: {
     padding: SIZES.padding * 1.5,
+    paddingBottom: 10,
   },
   detailsSection: {
-    marginBottom: 30,
+    marginBottom: 20,
   },
   sectionTitle: {
     fontSize: SIZES.md,
@@ -748,55 +725,71 @@ const createStyles = (colors) => StyleSheet.create({
     textAlign: 'right',
     ...FONTS.regular,
   },
-  recordingArea: {
-    alignItems: 'center',
-    paddingVertical: 30,
+  // During-recording info block
+  recordingInfo: {
+    backgroundColor: colors.background.secondary,
+    borderRadius: SIZES.radius,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  timer: {
-    fontSize: 52,
+  recordingTopic: {
+    fontSize: SIZES.base,
     color: colors.text.primary,
-    letterSpacing: 2,
-    marginBottom: 20,
-    fontWeight: '300',
-    fontVariant: ['tabular-nums'],
+    marginBottom: 6,
+    ...FONTS.semibold,
   },
-  waveformPlaceholder: {
-    height: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  recordingIndicator: {
+  recordingStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+  recordingStatusText: {
+    fontSize: SIZES.sm,
+    color: colors.brand.error,
+    marginLeft: 8,
+    ...FONTS.medium,
+  },
   recordingDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: colors.brand.error,
-    marginRight: 8,
   },
   recordingDotPaused: {
     backgroundColor: colors.brand.warning,
   },
-  recordingText: {
-    fontSize: SIZES.md,
-    color: colors.brand.error,
-    ...FONTS.medium,
+  picturesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  idleText: {
-    fontSize: SIZES.base,
-    color: colors.text.muted,
-    textAlign: 'center',
-    ...FONTS.regular,
+
+  // Fixed bottom controls
+  bottomControls: {
+    backgroundColor: colors.background.secondary,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 16,
+    paddingBottom: 24,
+    paddingHorizontal: SIZES.padding * 1.5,
+    alignItems: 'center',
+  },
+  timer: {
+    fontSize: 44,
+    color: colors.text.primary,
+    letterSpacing: 2,
+    marginBottom: 16,
+    fontWeight: '300',
+    fontVariant: ['tabular-nums'],
   },
   controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 20,
-    marginBottom: 16,
+    gap: 24,
+    marginBottom: 10,
   },
   secondaryBtn: {
     width: 50,
@@ -835,22 +828,6 @@ const createStyles = (colors) => StyleSheet.create({
     fontSize: SIZES.sm,
     color: colors.text.muted,
     marginTop: 8,
-    ...FONTS.regular,
-  },
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: colors.background.tertiary,
-    borderRadius: SIZES.radius,
-    padding: 14,
-    marginTop: 20,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: SIZES.sm,
-    color: colors.text.muted,
-    marginLeft: 10,
-    lineHeight: 18,
     ...FONTS.regular,
   },
 });

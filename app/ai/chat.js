@@ -15,7 +15,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
-import api from '../../services/api';
+import { delay, DUMMY_AI_MESSAGES } from '../../services/dummyData';
 
 export default function AIChatScreen() {
   const { lectureId, topic, action } = useLocalSearchParams();
@@ -41,43 +41,23 @@ export default function AIChatScreen() {
       setMessages(initialMessages);
       handleAutoAction(action, topic);
     } else if (lectureId) {
-      // Load existing chat history from server for lecture-specific chats
-      setMessages(initialMessages);
-      loadChatHistory(initialMessages);
+      // Seed with dummy chat history
+      setMessages([...initialMessages, ...DUMMY_AI_MESSAGES]);
     } else {
       setMessages(initialMessages);
     }
   }, []);
 
-  const loadChatHistory = async (initialMessages) => {
-    try {
-      const response = await api.getChatHistory(lectureId);
-      const historyData = response.data || [];
-      if (historyData.length > 0) {
-        const historyMessages = historyData.map((h) => ({
-          id: h.id,
-          role: h.role,
-          content: h.message,
-        }));
-        setMessages([...initialMessages, ...historyMessages]);
-      }
-    } catch {
-      // Silently fail — start fresh if history can't be loaded
-    }
-  };
-
   const handleAutoAction = async (actionType, topicName) => {
     setIsTyping(true);
     try {
-      let prompt;
-      if (actionType === 'recap') prompt = `Give me a recap of the lecture: ${topicName}`;
-      else if (actionType === 'explain') prompt = `Explain the key concepts from: ${topicName}`;
-      else if (actionType === 'quiz') prompt = `Generate a quiz based on: ${topicName}`;
-      else if (actionType === 'flashcards') prompt = `Create flashcards for: ${topicName}`;
-      else prompt = `Help me study: ${topicName}`;
-
-      const response = await api.chatWithAI(lectureId || null, prompt);
-      const content = response.data?.response || response.data?.message || 'I can help you study this topic. What would you like to know?';
+      await delay(1200);
+      let content;
+      if (actionType === 'recap') content = `Here's a quick recap of **${topicName}**:\n\n• Key concepts were introduced and explained with examples.\n• Important definitions and theorems were covered.\n• Practical applications were discussed.\n\nWould you like me to go deeper into any specific part?`;
+      else if (actionType === 'explain') content = `Let me explain the key concepts from **${topicName}** in simple terms:\n\nThe main ideas revolve around understanding the fundamental principles and how they apply in practice. The core concept can be broken down into three parts: definition, mechanism, and application.\n\nWhat specific concept would you like me to clarify?`;
+      else if (actionType === 'quiz') content = `Here's a quick quiz on **${topicName}**:\n\n**Q1:** What is the primary purpose of the main concept discussed?\n**Q2:** Explain the difference between the two main approaches.\n**Q3:** Give an example of how this is applied in a real scenario.\n\nTake your time to answer each question, then I'll give you feedback!`;
+      else if (actionType === 'flashcards') content = `Here are flashcards for **${topicName}**:\n\n**Card 1:**\nFront: What is [Key Term 1]?\nBack: [Key Term 1] is the process by which...\n\n**Card 2:**\nFront: Name the main types/categories\nBack: Type A, Type B, Type C\n\n**Card 3:**\nFront: What is the significance of [Concept]?\nBack: It is important because...\n\nSay "next" for more flashcards!`;
+      else content = 'I am ready to help you study. What would you like to know?';
       setMessages((prev) => [...prev, { id: `auto_${Date.now()}`, role: 'assistant', content }]);
     } catch (err) {
       setMessages((prev) => [...prev, { id: `auto_${Date.now()}`, role: 'assistant', content: 'I am ready to help you study. What would you like to know?' }]);
@@ -95,21 +75,14 @@ export default function AIChatScreen() {
         {
           text: 'Clear',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              if (lectureId) {
-                await api.clearChatHistory(lectureId);
-              }
-              setMessages([
-                {
-                  id: 'sys_1',
-                  role: 'assistant',
-                  content: `I am your AI study assistant for "${topic || 'this lecture'}". How can I help you study?`,
-                },
-              ]);
-            } catch (err) {
-              Alert.alert('Error', 'Could not clear chat history. Please try again.');
-            }
+          onPress: () => {
+            setMessages([
+              {
+                id: 'sys_1',
+                role: 'assistant',
+                content: `I am your AI study assistant for "${topic || 'this lecture'}". How can I help you study?`,
+              },
+            ]);
           },
         },
       ]
@@ -131,14 +104,15 @@ export default function AIChatScreen() {
     setIsTyping(true);
 
     try {
-      // Build conversation history to send (skip system greeting, map to {role, content})
-      const history = messages
-        .filter((m) => m.id !== 'sys_1')
-        .map((m) => ({ role: m.role, content: m.content }));
-
-      const response = await api.chatWithAI(lectureId || null, messageText, history);
-      const content = response.data?.message || response.data?.response || 'I apologize, I could not generate a response. Please try again.';
-      setMessages((prev) => [...prev, { id: `ai_${Date.now()}`, role: 'assistant', content }]);
+      await delay(1200);
+      const aiResponses = [
+        `That's a great question about **${messageText.substring(0, 30)}...**\n\nBased on the material covered, the key thing to understand is that this concept builds on fundamental principles. Let me break it down:\n\n1. First, consider the basic definition\n2. Then look at how it's applied\n3. Finally, understand the edge cases\n\nWould you like me to elaborate on any of these points?`,
+        `Excellent question! Here's what you need to know:\n\nThe concept you're asking about is central to understanding this topic. In simple terms, it works by taking an input, processing it according to defined rules, and producing an output.\n\nFor your exam, remember: the key formula/algorithm is what professors love to test on!`,
+        `Let me explain this clearly:\n\nThis is one of the most commonly tested topics in past exams. The main point is that you need to understand both the theory AND the practical application.\n\nHere's a memory trick: think of it as [PROCESS → OUTPUT → VERIFICATION]\n\nDoes that help clarify things?`,
+        `Good question! This comes up a lot in past questions.\n\nThe short answer is: it depends on the context. In scenario A, you would apply method X. In scenario B, method Y is more appropriate.\n\nThe distinction examiners look for is whether you understand WHY each approach is used, not just HOW.`,
+      ];
+      const randomResponse = aiResponses[Math.floor(Math.random() * aiResponses.length)];
+      setMessages((prev) => [...prev, { id: `ai_${Date.now()}`, role: 'assistant', content: randomResponse }]);
     } catch (err) {
       setMessages((prev) => [...prev, { id: `ai_${Date.now()}`, role: 'assistant', content: `Sorry, I encountered an error: ${err.message}. Please try again.` }]);
     } finally {

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -13,7 +14,7 @@ import { FONTS, SIZES, SHADOWS } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Card, EmptyState, Loader } from '../../components/shared';
 import useAuthStore from '../../store/authStore';
-import api from '../../services/api';
+import { delay, DUMMY_COURSES } from '../../services/dummyData';
 
 export default function MyCoursesScreen() {
   const router = useRouter();
@@ -24,7 +25,17 @@ export default function MyCoursesScreen() {
   const [profile, setProfile] = useState(null);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [questionCounts, setQuestionCounts] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredCourses = useMemo(() => {
+    if (!searchQuery.trim()) return courses;
+    const q = searchQuery.toLowerCase();
+    return courses.filter(
+      (c) =>
+        (c.code || c.course_code || '').toLowerCase().includes(q) ||
+        (c.name || c.title || '').toLowerCase().includes(q)
+    );
+  }, [courses, searchQuery]);
 
   const styles = createStyles(colors);
 
@@ -36,26 +47,11 @@ export default function MyCoursesScreen() {
     try {
       const userProfile = await getProfile();
       setProfile(userProfile);
-
-      if (userProfile?.departmentId && userProfile?.level) {
-        // Fetch courses for the user's department from the API
-        const response = await api.getCourses(userProfile.departmentId);
-        if (response.success && response.data) {
-          // Filter by user's level if courses have a level field
-          const allCourses = response.data;
-          const levelCourses = allCourses.filter(
-            (c) => c.level === userProfile.level
-          );
-          // Use level-filtered courses if any match, otherwise show all department courses
-          setCourses(levelCourses.length > 0 ? levelCourses : allCourses);
-
-          // Fetch question counts for each course
-          const courseCodes = (levelCourses.length > 0 ? levelCourses : allCourses).map(
-            (c) => c.code || c.course_code || ''
-          );
-          fetchQuestionCounts(courseCodes);
-        }
-      }
+      await delay(500);
+      const levelCourses = userProfile?.level
+        ? DUMMY_COURSES.filter((c) => c.level === userProfile.level)
+        : DUMMY_COURSES;
+      setCourses(levelCourses.length > 0 ? levelCourses : DUMMY_COURSES);
     } catch (err) {
       console.error('Failed to load courses:', err);
     } finally {
@@ -63,31 +59,11 @@ export default function MyCoursesScreen() {
     }
   };
 
-  const fetchQuestionCounts = async (courseCodes) => {
-    const counts = {};
-    for (const code of courseCodes) {
-      if (!code) continue;
-      try {
-        const response = await api.getQuestions({ courseCode: code });
-        if (response.success) {
-          counts[code] = Array.isArray(response.data) ? response.data.length : 0;
-        }
-      } catch (err) {
-        // silently handle individual failures
-      }
-    }
-    setQuestionCounts(counts);
-  };
-
-  const getQuestionCount = (courseCode) => {
-    return questionCounts[courseCode] || 0;
-  };
-
   const renderCourse = ({ item }) => {
     const courseCode = item.code || item.course_code || '';
     const courseName = item.name || item.title || '';
     const courseUnits = item.units || item.credit_units || 0;
-    const questionCount = getQuestionCount(courseCode);
+    const questionCount = item.question_count || 0;
 
     return (
       <Card
@@ -125,36 +101,55 @@ export default function MyCoursesScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>
-              Hello, {user?.displayName?.split(' ')[0] || 'Student'}
+              Hello, {user?.display_name?.split(' ')[0] || user?.displayName?.split(' ')[0] || 'Student'}
             </Text>
             <Text style={styles.headerSubtitle}>
-              {profile?.departmentName || 'Department'} - {profile?.level || 'Level'}
+              {profile?.departmentName || 'Department'} · {profile?.level ? `Part ${profile.level}` : 'Level'}
             </Text>
           </View>
-          <View style={styles.headerRight}>
-            <TouchableOpacity
-              style={styles.headerIcon}
-              onPress={() => router.push('/settings')}
-            >
-              <Feather name="settings" size={20} color={colors.text.primary} />
+          <TouchableOpacity
+            style={styles.headerIcon}
+            onPress={() => router.push('/settings')}
+          >
+            <Feather name="settings" size={20} color={colors.text.primary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Search bar */}
+        <View style={styles.searchBar}>
+          <Feather name="search" size={16} color={colors.text.muted} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search courses..."
+            placeholderTextColor={colors.text.muted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Feather name="x" size={16} color={colors.text.muted} />
             </TouchableOpacity>
-          </View>
+          )}
         </View>
 
         {/* Section Title */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Your Courses</Text>
-          <Text style={styles.sectionCount}>{courses.length} courses</Text>
+          <Text style={styles.sectionCount}>
+            {filteredCourses.length}{searchQuery ? ` of ${courses.length}` : ''} courses
+          </Text>
         </View>
 
         {/* Course List */}
-        {courses.length > 0 ? (
+        {filteredCourses.length > 0 ? (
           <FlatList
-            data={courses}
+            data={filteredCourses}
             renderItem={renderCourse}
             keyExtractor={(item) => item.id || item._id || item.code || item.course_code}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           />
         ) : (
           <EmptyState
@@ -163,6 +158,15 @@ export default function MyCoursesScreen() {
             message="Complete your profile setup to see courses for your department and level."
           />
         )}
+
+        {/* Bookmark FAB */}
+        <TouchableOpacity
+          style={styles.bookmarkFAB}
+          onPress={() => router.push('/bookmarks')}
+          activeOpacity={0.85}
+        >
+          <Feather name="bookmark" size={22} color={colors.white} />
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -198,9 +202,6 @@ const createStyles = (colors) => StyleSheet.create({
     marginTop: 2,
     ...FONTS.regular,
   },
-  headerRight: {
-    flexDirection: 'row',
-  },
   headerIcon: {
     width: 40,
     height: 40,
@@ -208,6 +209,26 @@ const createStyles = (colors) => StyleSheet.create({
     backgroundColor: colors.background.tertiary,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: SIZES.padding * 1.5,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: colors.background.tertiary,
+    borderRadius: SIZES.radius,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: SIZES.base,
+    color: colors.text.primary,
+    ...FONTS.regular,
+    padding: 0,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -278,5 +299,17 @@ const createStyles = (colors) => StyleSheet.create({
     marginLeft: 6,
     flex: 1,
     ...FONTS.regular,
+  },
+  bookmarkFAB: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.brand.warning,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...SHADOWS.medium,
   },
 });

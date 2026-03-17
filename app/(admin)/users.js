@@ -14,7 +14,7 @@ import { FONTS, SIZES } from '../../constants/theme';
 import { Card, EmptyState } from '../../components/shared';
 import { useToast } from '../../components/shared/Toast';
 import { useTheme } from '../../context/ThemeContext';
-import api from '../../services/api';
+import { delay, DUMMY_USERS } from '../../services/dummyData';
 
 const ROLE_COLORS = {
   user: { bg: 'rgba(100, 116, 139, 0.15)', text: '#64748B' },
@@ -33,16 +33,8 @@ export default function AdminUsers() {
 
   const loadUsers = async () => {
     try {
-      const response = await api.getAllUsers();
-      if (response?.success && Array.isArray(response?.data)) {
-        setUsers(response.data);
-      } else if (Array.isArray(response?.data)) {
-        setUsers(response.data);
-      } else if (Array.isArray(response)) {
-        setUsers(response);
-      } else {
-        setUsers([]);
-      }
+      await delay(400);
+      setUsers(DUMMY_USERS);
     } catch (err) {
       showToast('error', 'Failed to load users');
     } finally {

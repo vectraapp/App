@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { api } from '../services/api';
 
 const useAuthStore = create((set, get) => ({
   user: null,
@@ -10,44 +9,20 @@ const useAuthStore = create((set, get) => ({
 
   initialize: async () => {
     try {
-      // Check for existing session
-      const sessionJson = await AsyncStorage.getItem('session');
-      const profileJson = await AsyncStorage.getItem('userProfile');
-
-      if (sessionJson) {
-        // Verify session with backend
-        try {
-          console.log('[Auth] Verifying existing session...');
-          const response = await api.getCurrentUser();
-
-          if (response.success && response.data?.user) {
-            const user = response.data.user;
-            await AsyncStorage.setItem('currentUser', JSON.stringify(user));
-
-            // Check backend profile first, then local profile
-            const backendProfile = user.profile || {};
-            const localProfile = profileJson ? JSON.parse(profileJson) : null;
-            const onboarded =
-              backendProfile.onboarding_completed ||
-              localProfile?.onboardingCompleted ||
-              false;
-
-            set({
-              user,
-              isAuthenticated: true,
-              onboardingCompleted: onboarded,
-              isLoading: false,
-            });
-            console.log('[Auth] Session verified, user logged in, onboarded:', onboarded);
-            return;
-          }
-        } catch (error) {
-          console.log('[Auth] Session expired or invalid, clearing...');
-          await AsyncStorage.removeItem('session');
-          await AsyncStorage.removeItem('currentUser');
-        }
+      const userJson = await AsyncStorage.getItem('mockUser');
+      if (userJson) {
+        const user = JSON.parse(userJson);
+        const profileJson = await AsyncStorage.getItem(`profile_${user.email}`);
+        const profile = profileJson ? JSON.parse(profileJson) : {};
+        set({
+          user,
+          isAuthenticated: true,
+          onboardingCompleted: profile.onboardingCompleted || false,
+          isLoading: false,
+        });
+        console.log('[Auth] Mock session restored for', user.email);
+        return;
       }
-
       set({ isLoading: false });
     } catch (error) {
       console.error('[Auth] Initialize error:', error);
@@ -56,76 +31,73 @@ const useAuthStore = create((set, get) => ({
   },
 
   login: async (email, password) => {
-    try {
-      console.log('[Auth] Logging in...');
-      const response = await api.signin(email, password);
+    const isAdmin = email.toLowerCase() === 'admin@vectra.app';
+    const user = {
+      id: `mock_${email.replace(/[^a-zA-Z0-9]/g, '_')}`,
+      email: email.toLowerCase(),
+      display_name: isAdmin ? 'Vectra Admin' : email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+      role: isAdmin ? 'admin' : 'user',
+      profile: {},
+    };
 
-      if (response.success && response.data) {
-        const user = response.data.user;
-        await AsyncStorage.setItem('currentUser', JSON.stringify(user));
+    await AsyncStorage.setItem('mockUser', JSON.stringify(user));
 
-        // Use backend profile's onboarding_completed (snake_case from Supabase)
-        const backendProfile = user.profile || {};
-        const backendOnboarded = backendProfile.onboarding_completed || false;
+    const profileJson = await AsyncStorage.getItem(`profile_${email.toLowerCase()}`);
+    const profile = profileJson ? JSON.parse(profileJson) : {};
 
-        // Also check local profile as fallback
-        const profileJson = await AsyncStorage.getItem(`profile_${email.toLowerCase()}`);
-        const localProfile = profileJson ? JSON.parse(profileJson) : null;
+    set({
+      user,
+      isAuthenticated: true,
+      onboardingCompleted: profile.onboardingCompleted || false,
+    });
 
-        const onboarded = backendOnboarded || localProfile?.onboardingCompleted || false;
-
-        // Sync backend profile locally
-        if (backendProfile.id) {
-          const merged = {
-            ...localProfile,
-            ...backendProfile,
-            onboardingCompleted: onboarded,
-          };
-          await AsyncStorage.setItem(`profile_${email.toLowerCase()}`, JSON.stringify(merged));
-          await AsyncStorage.setItem('userProfile', JSON.stringify(merged));
-        }
-
-        set({
-          user,
-          isAuthenticated: true,
-          onboardingCompleted: onboarded,
-        });
-
-        console.log('[Auth] Login successful, onboarded:', onboarded);
-        return user;
-      }
-
-      throw new Error(response.message || 'Login failed');
-    } catch (error) {
-      console.error('[Auth] Login error:', error.message);
-      throw error;
-    }
+    console.log('[Auth] Mock login successful for', email);
+    return user;
   },
 
-  signup: async (email, password, displayName, termsAccepted = true) => {
-    try {
-      console.log('[Auth] Signing up...');
-      const response = await api.signup(email, password, displayName, termsAccepted);
+  loginWithGoogle: async () => {
+    const user = {
+      id: `google_${Date.now()}`,
+      email: 'google.user@gmail.com',
+      display_name: 'Google User',
+      role: 'user',
+      profile: {},
+      provider: 'google',
+    };
 
-      if (response.success && response.data) {
-        const user = response.data.user;
-        await AsyncStorage.setItem('currentUser', JSON.stringify(user));
+    await AsyncStorage.setItem('mockUser', JSON.stringify(user));
+    const profileJson = await AsyncStorage.getItem(`profile_${user.email}`);
+    const profile = profileJson ? JSON.parse(profileJson) : {};
 
-        set({
-          user,
-          isAuthenticated: true,
-          onboardingCompleted: false,
-        });
+    set({
+      user,
+      isAuthenticated: true,
+      onboardingCompleted: profile.onboardingCompleted || false,
+    });
 
-        console.log('[Auth] Signup successful');
-        return user;
-      }
+    console.log('[Auth] Mock Google login successful');
+    return user;
+  },
 
-      throw new Error(response.message || 'Signup failed');
-    } catch (error) {
-      console.error('[Auth] Signup error:', error.message);
-      throw error;
-    }
+  signup: async (email, password, displayName) => {
+    const user = {
+      id: `mock_${email.replace(/[^a-zA-Z0-9]/g, '_')}`,
+      email: email.toLowerCase(),
+      display_name: displayName || email.split('@')[0],
+      role: 'user',
+      profile: {},
+    };
+
+    await AsyncStorage.setItem('mockUser', JSON.stringify(user));
+
+    set({
+      user,
+      isAuthenticated: true,
+      onboardingCompleted: false,
+    });
+
+    console.log('[Auth] Mock signup successful for', email);
+    return user;
   },
 
   completeOnboarding: async (profileData) => {
@@ -168,27 +140,21 @@ const useAuthStore = create((set, get) => ({
   },
 
   logout: async () => {
-    try {
-      await api.signout();
-    } catch (error) {
-      console.log('[Auth] Signout API error (continuing anyway):', error.message);
-    }
-
-    await AsyncStorage.removeItem('currentUser');
+    await AsyncStorage.removeItem('mockUser');
     await AsyncStorage.removeItem('userProfile');
-    await AsyncStorage.removeItem('session');
-
     set({ user: null, isAuthenticated: false, onboardingCompleted: false });
-    console.log('[Auth] Logged out');
+    console.log('[Auth] Mock logged out');
   },
 
   deleteAccount: async () => {
-    await api.deleteAccount();
-    await AsyncStorage.removeItem('currentUser');
+    const { user } = get();
+    if (user) {
+      await AsyncStorage.removeItem(`profile_${user.email}`);
+    }
+    await AsyncStorage.removeItem('mockUser');
     await AsyncStorage.removeItem('userProfile');
-    await AsyncStorage.removeItem('session');
     set({ user: null, isAuthenticated: false, onboardingCompleted: false });
-    console.log('[Auth] Account deleted');
+    console.log('[Auth] Mock account deleted');
   },
 }));
 

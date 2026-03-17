@@ -14,7 +14,7 @@ import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Card, Button } from '../../components/shared';
 import { useToast } from '../../components/shared/Toast';
-import api from '../../services/api';
+import { delay } from '../../services/dummyData';
 
 export default function SharePreviewScreen() {
   const router = useRouter();
@@ -35,8 +35,21 @@ export default function SharePreviewScreen() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.get(`/shares/preview/${code}`);
-      setPreview(res.data);
+      await delay(600);
+      setPreview({
+        code: code || 'DEMO01',
+        type: 'lecture',
+        resource: {
+          topic: 'Memory Management & Paging',
+          courseCode: 'CSC301',
+          courseName: 'Operating Systems',
+          lecturer: 'Prof. Adeyemi',
+          date: new Date(Date.now() - 2 * 86400000).toISOString(),
+          duration: 2700,
+        },
+        creatorEmail: 'friend@oau.edu.ng',
+        expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+      });
     } catch (err) {
       setError(err.message || 'Failed to load share preview');
     } finally {
@@ -47,16 +60,9 @@ export default function SharePreviewScreen() {
   const handleRedeem = async () => {
     setRedeeming(true);
     try {
-      const res = await api.post('/shares/redeem', { code });
+      await delay(800);
       showToast('success', 'Content saved to your library!');
-      const codeType = res.data?.codeType;
-      const resource = res.data?.copiedResource;
-
-      if (codeType === 'lecture' && resource?.id) {
-        router.replace(`/lecture/${resource.id}`);
-      } else {
-        router.replace('/(tabs)/my-courses');
-      }
+      router.replace('/(tabs)/my-courses');
     } catch (err) {
       showToast('error', err.message || 'Failed to redeem');
     } finally {

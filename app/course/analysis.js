@@ -34,8 +34,7 @@ export default function CourseAnalysisScreen() {
   const loadData = async () => {
     setLoading(true);
     await delay(400);
-    const data = DUMMY_REPEATED_QUESTIONS[code] || [];
-    setQuestions(data);
+    setQuestions(DUMMY_REPEATED_QUESTIONS[code] || []);
     setLoading(false);
   };
 

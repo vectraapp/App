@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,8 @@ import { useTheme } from '../../context/ThemeContext';
 import { Button, Loader } from '../../components/shared';
 import { useToast } from '../../components/shared/Toast';
 import useAuthStore from '../../store/authStore';
-import api from '../../services/api';
+import { UNIVERSITIES } from '../../constants/mockData';
+import { delay } from '../../services/dummyData';
 
 const TOTAL_STEPS = 6;
 
@@ -61,110 +62,91 @@ export default function OnboardingScreen() {
   const step = STEP_CONFIG[currentStep];
 
   // --------------------------------------------------
-  // Fetch universities on mount
+  // Load universities on mount (local data)
   // --------------------------------------------------
   useEffect(() => {
-    fetchUniversities();
+    setFetching(true);
+    // Map to shape expected by getItems()
+    const mapped = UNIVERSITIES.map((u) => ({
+      id: u.id,
+      name: u.name,
+      short_name: u.shortName,
+      state: u.location,
+    }));
+    setUniversities(mapped);
+    setFetching(false);
   }, []);
 
-  const fetchUniversities = async () => {
-    setFetching(true);
-    try {
-      const res = await api.getUniversities();
-      if (res.success && Array.isArray(res.data)) {
-        setUniversities(res.data);
-      } else {
-        setUniversities([]);
-      }
-    } catch (err) {
-      showToast('error', 'Failed to load universities. Pull down to retry.');
-      setUniversities([]);
-    } finally {
-      setFetching(false);
-    }
-  };
-
   // --------------------------------------------------
-  // Fetch faculties when university changes
+  // Local data navigation helpers
   // --------------------------------------------------
-  const fetchFaculties = useCallback(async (universityId) => {
+  const fetchFaculties = (universityId) => {
     setFetching(true);
     setFaculties([]);
-    try {
-      const res = await api.getFaculties(universityId);
-      if (res.success && Array.isArray(res.data)) {
-        setFaculties(res.data);
-      }
-    } catch (err) {
-      showToast('error', 'Failed to load faculties.');
-    } finally {
-      setFetching(false);
-    }
-  }, [showToast]);
+    const uni = UNIVERSITIES.find((u) => u.id === universityId);
+    const mapped = (uni?.faculties || []).map((f) => ({ id: f.id, name: f.name }));
+    setFaculties(mapped);
+    setFetching(false);
+  };
 
-  // --------------------------------------------------
-  // Fetch departments when faculty changes
-  // --------------------------------------------------
-  const fetchDepartments = useCallback(async (facultyId) => {
+  const fetchDepartments = (facultyId) => {
     setFetching(true);
     setDepartments([]);
-    try {
-      const res = await api.getDepartments(facultyId);
-      if (res.success && Array.isArray(res.data)) {
-        setDepartments(res.data);
+    let found = [];
+    for (const uni of UNIVERSITIES) {
+      const fac = uni.faculties.find((f) => f.id === facultyId);
+      if (fac) {
+        found = fac.departments.map((d) => ({ id: d.id, name: d.name }));
+        break;
       }
-    } catch (err) {
-      showToast('error', 'Failed to load departments.');
-    } finally {
-      setFetching(false);
     }
-  }, [showToast]);
+    setDepartments(found);
+    setFetching(false);
+  };
 
-  // --------------------------------------------------
-  // Fetch levels when university is known (for step 3)
-  // --------------------------------------------------
-  const fetchLevels = useCallback(async (universityId) => {
+  const fetchLevels = (departmentId) => {
     setFetching(true);
     setLevels([]);
-    try {
-      const res = await api.getLevels(universityId);
-      if (res.success && Array.isArray(res.data)) {
-        setLevels(res.data);
+    let found = [];
+    outer: for (const uni of UNIVERSITIES) {
+      for (const fac of uni.faculties) {
+        const dept = fac.departments.find((d) => d.id === departmentId);
+        if (dept) {
+          found = dept.levels || [];
+          break outer;
+        }
       }
-    } catch (err) {
-      showToast('error', 'Failed to load levels.');
-    } finally {
-      setFetching(false);
     }
-  }, [showToast]);
+    setLevels(found);
+    setFetching(false);
+  };
 
-  // --------------------------------------------------
-  // Fetch courses for department + level + semester
-  // --------------------------------------------------
-  const fetchCourses = useCallback(async (departmentId, level, semester) => {
+  const fetchCourses = (departmentId, level, semester) => {
     setFetching(true);
     setCourses([]);
-    try {
-      // Map semester id to full name expected by the DB
-      const semesterMap = { first: 'First Semester', second: 'Second Semester' };
-      const semesterFull = semesterMap[semester] || semester;
-      const encodedLevel = encodeURIComponent(level);
-      const encodedSemester = encodeURIComponent(semesterFull);
-      const res = await api.get(
-        `/data/courses/${departmentId}?level=${encodedLevel}&semester=${encodedSemester}`
-      );
-      if (res.success && Array.isArray(res.data)) {
-        setCourses(res.data);
-      } else {
-        setCourses([]);
+    const semesterMap = { first: 'First Semester', second: 'Second Semester' };
+    const semesterFull = semesterMap[semester] || semester;
+    let found = [];
+    outer: for (const uni of UNIVERSITIES) {
+      for (const fac of uni.faculties) {
+        const dept = fac.departments.find((d) => d.id === departmentId);
+        if (dept) {
+          const levelCourses = dept.courses?.[level] || [];
+          found = levelCourses
+            .filter((c) => c.semesters.includes(semesterFull))
+            .map((c, i) => ({
+              id: `${dept.id}_${level}_${c.code}`.replace(/\s/g, '_'),
+              code: c.code,
+              title: c.name,
+              credit_units: c.units,
+            }));
+          break outer;
+        }
       }
-    } catch (err) {
-      showToast('error', 'Failed to load courses.');
-      setCourses([]);
-    } finally {
-      setFetching(false);
     }
-  }, [showToast]);
+    setCourses(found);
+    setFetching(false);
+  };
 
   // --------------------------------------------------
   // Build list items for each step
@@ -291,7 +273,7 @@ export default function OnboardingScreen() {
 
     if (currentStep === 2 && selectedDepartment) {
       setCurrentStep(nextStep);
-      fetchLevels(selectedUniversity.id);
+      fetchLevels(selectedDepartment.id);
       return;
     }
 
@@ -319,11 +301,7 @@ export default function OnboardingScreen() {
   const handleFinish = async () => {
     setEnrolling(true);
     try {
-      // Enroll in all displayed courses
-      if (courses.length > 0) {
-        const courseIds = courses.map((c) => c.id);
-        await api.enrollInCourses(courseIds);
-      }
+      await delay(800);
 
       // Save onboarding profile locally
       const semesterMap = { first: 'First Semester', second: 'Second Semester' };

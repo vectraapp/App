@@ -15,7 +15,7 @@ import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Button, Input } from '../../components/shared';
 import { useToast } from '../../components/shared/Toast';
-import api from '../../services/api';
+import { delay } from '../../services/dummyData';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
@@ -43,7 +43,7 @@ export default function ForgotPasswordScreen() {
 
     setLoading(true);
     try {
-      await api.requestPasswordReset(email.trim());
+      await delay(800);
       setSent(true);
     } catch (err) {
       showToast('error', err.message || 'Failed to send reset link. Please try again.');

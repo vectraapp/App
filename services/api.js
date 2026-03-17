@@ -60,10 +60,22 @@ class ApiService {
     try {
       console.log(`[API] ${options.method || 'GET'} ${url}`);
       const response = await fetch(url, config);
-      const data = await response.json();
+
+      // Safely parse body — empty responses (e.g. rate-limit or server crash) return null
+      const text = await response.text();
+      let data = null;
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          throw new Error(`Server error (${response.status}): ${text.substring(0, 120)}`);
+        }
+      } else {
+        throw new Error(`Server returned empty response (status ${response.status})`);
+      }
 
       if (!response.ok) {
-        throw new Error(data.message || 'API request failed');
+        throw new Error(data?.message || data?.error || `Request failed with status ${response.status}`);
       }
 
       return data;
@@ -594,6 +606,91 @@ class ApiService {
 
   async updateDepartment(id, data) {
     return this.put(API_ENDPOINTS.COURSES.ADMIN_DEPARTMENT(id), data);
+  }
+
+  // ==========================================
+  // STREAKS
+  // ==========================================
+
+  async getStudyStreak() {
+    return this.get('/streaks');
+  }
+
+  async recordStudyActivity() {
+    return this.post('/streaks/record', {});
+  }
+
+  // ==========================================
+  // BOOKMARKS
+  // ==========================================
+
+  async getBookmarks() {
+    return this.get('/bookmarks');
+  }
+
+  async addBookmark(data) {
+    return this.post('/bookmarks', data);
+  }
+
+  async removeBookmark(id) {
+    return this.delete(`/bookmarks/${id}`);
+  }
+
+  // ==========================================
+  // DOWNLOADS
+  // ==========================================
+
+  async getDownloads() {
+    return this.get('/downloads');
+  }
+
+  async deleteDownload(id) {
+    return this.delete(`/downloads/${id}`);
+  }
+
+  // ==========================================
+  // ANALYTICS
+  // ==========================================
+
+  async getAnalytics(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return this.get(query ? `/admin/analytics?${query}` : '/admin/analytics');
+  }
+
+  // ==========================================
+  // REPEATED QUESTIONS
+  // ==========================================
+
+  async getRepeatedQuestions(courseCode) {
+    return this.get(`/questions/repeated/${courseCode}`);
+  }
+
+  // ==========================================
+  // EXAM COUNTDOWNS
+  // ==========================================
+
+  async getExamCountdowns() {
+    return this.get('/exams/countdowns');
+  }
+
+  async addExamCountdown(data) {
+    return this.post('/exams/countdowns', data);
+  }
+
+  async deleteExamCountdown(id) {
+    return this.delete(`/exams/countdowns/${id}`);
+  }
+
+  // ==========================================
+  // RECENTLY VIEWED
+  // ==========================================
+
+  async getRecentlyViewed() {
+    return this.get('/recently-viewed');
+  }
+
+  async addRecentlyViewed(data) {
+    return this.post('/recently-viewed', data);
   }
 }
 

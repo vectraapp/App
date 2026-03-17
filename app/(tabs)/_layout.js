@@ -37,20 +37,20 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="browse"
-        options={{
-          title: 'Browse',
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="search" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="lectures"
         options={{
           title: 'Lectures',
           tabBarIcon: ({ color, size }) => (
             <Feather name="mic" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="streaks"
+        options={{
+          title: 'Streaks',
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="zap" size={size} color={color} />
           ),
         }}
       />

@@ -18,7 +18,7 @@ import { FONTS, SIZES } from '../../constants/theme';
 import { Card, EmptyState } from '../../components/shared';
 import { useToast } from '../../components/shared/Toast';
 import { useTheme } from '../../context/ThemeContext';
-import api from '../../services/api';
+import { delay, DUMMY_PENDING_QUESTIONS } from '../../services/dummyData';
 import PDFViewer from '../../components/viewers/PDFViewer';
 
 export default function AdminQuestions() {
@@ -53,16 +53,8 @@ export default function AdminQuestions() {
 
   const loadQuestions = async () => {
     try {
-      const response = await api.getPendingQuestions();
-      if (response?.success && Array.isArray(response?.data)) {
-        setQuestions(response.data);
-      } else if (Array.isArray(response?.data)) {
-        setQuestions(response.data);
-      } else if (Array.isArray(response)) {
-        setQuestions(response);
-      } else {
-        setQuestions([]);
-      }
+      await delay(400);
+      setQuestions(DUMMY_PENDING_QUESTIONS);
     } catch (err) {
       showToast('error', 'Failed to load pending questions');
     } finally {
@@ -83,9 +75,9 @@ export default function AdminQuestions() {
   const handleApprove = async (id) => {
     setActionLoading(id);
     try {
-      await api.approveQuestion(id);
+      await delay(600);
+      setQuestions((prev) => prev.filter((q) => q.id !== id));
       showToast('success', 'Question approved successfully');
-      loadQuestions();
     } catch (err) {
       showToast('error', 'Failed to approve question');
     } finally {
@@ -109,9 +101,9 @@ export default function AdminQuestions() {
             }
             setActionLoading(id);
             try {
-              await api.rejectQuestion(id, reason.trim());
+              await delay(600);
+              setQuestions((prev) => prev.filter((q) => q.id !== id));
               showToast('success', 'Question rejected');
-              loadQuestions();
             } catch (err) {
               showToast('error', 'Failed to reject question');
             } finally {

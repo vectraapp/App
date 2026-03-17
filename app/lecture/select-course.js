@@ -6,8 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Card, Loader } from '../../components/shared';
-import useAuthStore from '../../store/authStore';
-import api from '../../services/api';
+import { delay, DUMMY_COURSES } from '../../services/dummyData';
 
 const createStyles = (colors) => StyleSheet.create({
   safe: {
@@ -78,7 +77,6 @@ const createStyles = (colors) => StyleSheet.create({
 export default function SelectCourseScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const getProfile = useAuthStore((s) => s.getProfile);
   const styles = createStyles(colors);
 
   const [courses, setCourses] = useState([]);
@@ -90,14 +88,8 @@ export default function SelectCourseScreen() {
 
   const loadCourses = async () => {
     try {
-      const profile = await getProfile();
-      if (profile?.department_id || profile?.departmentId) {
-        const deptId = profile.department_id || profile.departmentId;
-        const response = await api.getCourses(deptId);
-        if (response.success && response.data) {
-          setCourses(response.data);
-        }
-      }
+      await delay(300);
+      setCourses(DUMMY_COURSES);
     } catch (err) {
       console.error('Failed to load courses:', err);
     } finally {

@@ -16,7 +16,7 @@ import * as Clipboard from 'expo-clipboard';
 import { FONTS, SIZES } from '../../constants/theme';
 import { Card } from '../../components/shared';
 import { useTheme } from '../../context/ThemeContext';
-import api from '../../services/api';
+import { delay, DUMMY_MY_SHARES } from '../../services/dummyData';
 
 export default function MySharesScreen() {
   const router = useRouter();
@@ -31,11 +31,11 @@ export default function MySharesScreen() {
 
   const loadShares = async () => {
     try {
-      const response = await api.getMyShares();
-      const mapped = (response.data || []).map(share => ({
+      await delay(400);
+      const mapped = DUMMY_MY_SHARES.map(share => ({
         id: share.id,
-        lectureTitle: share.resource_metadata?.topic || share.resource_metadata?.name || share.code_type,
-        course: share.resource_metadata?.courseCode || share.resource_metadata?.course_code || '',
+        lectureTitle: share.resource_title,
+        course: share.course_code,
         code: share.code,
         createdAt: new Date(share.created_at),
         expiresAt: share.expires_at ? new Date(share.expires_at) : null,
@@ -71,11 +71,8 @@ export default function MySharesScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const share = shares.find(s => s.id === shareId);
-              if (share) {
-                await api.deactivateShareCode(share.code);
-                setShares(prev => prev.filter(s => s.id !== shareId));
-              }
+              await delay(400);
+              setShares(prev => prev.filter(s => s.id !== shareId));
             } catch (err) {
               Alert.alert('Error', err.message || 'Failed to revoke share');
             }

@@ -79,32 +79,14 @@ export default function SettingsScreen() {
           <Card style={styles.menuCard}>
             <SettingItem
               icon="bell"
-              label="Push Notifications"
-              sublabel="On"
-              onPress={() => {}}
-            />
-            <SettingItem
-              icon="mail"
-              label="Email Notifications"
-              sublabel="Off"
-              onPress={() => {}}
+              label="Notifications"
+              sublabel="Manage push alerts"
+              onPress={() => router.push('/settings/notifications')}
               isLast
             />
           </Card>
 
-          {/* Data Section */}
-          <Text style={styles.sectionTitle}>Data & Storage</Text>
-          <Card style={styles.menuCard}>
-            <SettingItem
-              icon="trash-2"
-              label="Clear Cache"
-              sublabel="Free up storage"
-              onPress={() => {}}
-              isLast
-            />
-          </Card>
-
-          {/* Privacy Section */}
+          {/* Privacy & Legal Section */}
           <Text style={styles.sectionTitle}>Privacy & Legal</Text>
           <Card style={styles.menuCard}>
             <SettingItem
@@ -116,6 +98,11 @@ export default function SettingsScreen() {
               icon="file-text"
               label="Terms of Service"
               onPress={() => router.push('/legal/terms')}
+            />
+            <SettingItem
+              icon="info"
+              label="About Vectra"
+              onPress={() => router.push('/about')}
               isLast
             />
           </Card>

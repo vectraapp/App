@@ -14,7 +14,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
-import api from '../../services/api';
+import { delay } from '../../services/dummyData';
 
 export default function JoinGroupScreen() {
   const router = useRouter();
@@ -31,13 +31,8 @@ export default function JoinGroupScreen() {
     setError('');
     setLoading(true);
     try {
-      const response = await api.joinGroupByCode(code.trim());
-      if (response.success && response.data?.id) {
-        router.replace({
-          pathname: '/groups/[id]',
-          params: { id: response.data.id, name: response.data.name },
-        });
-      }
+      await delay(800);
+      router.back();
     } catch (err) {
       setError(err.message || 'Failed to join group. Check your invite code.');
     } finally {

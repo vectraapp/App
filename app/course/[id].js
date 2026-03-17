@@ -23,10 +23,10 @@ import * as FileSystem from 'expo-file-system';
 import { FONTS, SIZES, SHADOWS } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Card, EmptyState, Button } from '../../components/shared';
-import api from '../../services/api';
-import useAuthStore from '../../store/authStore';
+import { delay, DUMMY_QUESTIONS, DUMMY_TEXTBOOKS, DUMMY_SESSIONS } from '../../services/dummyData';
+import { AI_RESPONSES } from '../../constants/mockData';
 
-const TABS = ['Questions', 'Books', 'PDFs', 'Jot'];
+const TABS = ['Questions', 'Materials', 'PDFs', 'Jot'];
 
 const FALLBACK_SESSIONS = ['2021/2022', '2022/2023', '2023/2024', '2024/2025', '2025/2026'];
 
@@ -35,7 +35,6 @@ export default function CourseDetailScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const courseCode = decodeURIComponent(id);
-  const currentUser = useAuthStore((s) => s.user);
 
   const [activeTab, setActiveTab] = useState(0);
   const [selectedSession, setSelectedSession] = useState('all');
@@ -45,6 +44,7 @@ export default function CourseDetailScreen() {
   const [jot, setJot] = useState('');
   const [lastSaved, setLastSaved] = useState(null);
   const [showAISheet, setShowAISheet] = useState(false);
+  const [showFilterModal, setShowFilterModal] = useState(false);
   const [aiResponse, setAiResponse] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [pdfUploading, setPdfUploading] = useState(false);
@@ -56,110 +56,43 @@ export default function CourseDetailScreen() {
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(true);
   const [isLoadingTextbooks, setIsLoadingTextbooks] = useState(true);
 
-  // Fetch questions, textbooks, and sessions from API on mount
+  // Load questions, textbooks, and sessions from dummy data
   useEffect(() => {
-    const currentUserId = currentUser?.id;
-
-    const normalizeQuestion = (item, extra = {}) => ({
-      id: item.id,
-      courseCode: item.course_code || item.courseCode || courseCode,
-      session: item.academic_session || item.session || '',
-      semester: item.semester || '',
-      type: item.question_type || item.exam_type || item.type || '',
-      pages: item.page_count || item.pages || 0,
-      title:
-        item.title ||
-        `${item.course_code || courseCode} ${item.question_type || item.exam_type || item.type || 'Question'} - ${item.academic_session || item.session || ''}`,
-      imageUrl: item.image_url || item.file_url || item.imageUrl || null,
-      fileType: item.file_type || 'pdf',
-      source: item.source || 'past_questions',
-      ...extra,
-    });
-
-    const fetchQuestions = async () => {
+    const loadQuestions = async () => {
       setIsLoadingQuestions(true);
-      try {
-        // Fetch from past_questions, approved uploads, and current user's own uploads simultaneously
-        const [questionsResp, uploadsResp, myUploadsResp] = await Promise.allSettled([
-          api.getQuestions({ courseCode }),
-          api.getPublishedUploads({ course_code: courseCode, upload_type: 'past_question' }),
-          api.getMyUploads({ course_code: courseCode, upload_type: 'past_question' }),
-        ]);
-
-        const pastQs = questionsResp.status === 'fulfilled'
-          ? (questionsResp.value.data || []).map((item) =>
-              normalizeQuestion({ ...item, source: 'past_questions' }))
-          : [];
-
-        // Published uploads visible to everyone
-        const publishedUploadIds = new Set();
-        const uploadQs = uploadsResp.status === 'fulfilled'
-          ? (uploadsResp.value.data || []).map((item) => {
-              publishedUploadIds.add(item.id);
-              return normalizeQuestion({ ...item, source: 'user_upload' });
-            })
-          : [];
-
-        // Uploader's own uploads — always visible to them regardless of status
-        const myUploadQs = myUploadsResp.status === 'fulfilled'
-          ? (myUploadsResp.value.data || [])
-              .filter((item) => !publishedUploadIds.has(item.id)) // skip already included approved ones
-              .map((item) =>
-                normalizeQuestion({ ...item, source: 'user_upload' }, {
-                  myUpload: true,
-                  uploadStatus: item.status,
-                }))
-          : [];
-
-        // Merge: past questions first, then published uploads, then uploader's own pending/rejected
-        const seen = new Set();
-        const merged = [...pastQs, ...uploadQs, ...myUploadQs].filter((q) => {
-          if (seen.has(q.id)) return false;
-          seen.add(q.id);
-          return true;
-        });
-
-        setQuestions(merged);
-      } catch (err) {
-        console.error('Failed to fetch questions:', err);
-        setQuestions([]);
-      } finally {
-        setIsLoadingQuestions(false);
-      }
+      await delay(400);
+      const filtered = DUMMY_QUESTIONS
+        .filter((q) => q.courseCode === courseCode)
+        .map((q) => ({
+          id: q.id,
+          courseCode: q.courseCode,
+          session: q.session,
+          semester: q.semester,
+          type: q.type,
+          pages: q.pages,
+          title: q.title,
+          imageUrl: null,
+          fileType: 'pdf',
+          source: 'past_questions',
+        }));
+      setQuestions(filtered);
+      setIsLoadingQuestions(false);
     };
 
-    const fetchTextbooks = async () => {
+    const loadTextbooks = async () => {
       setIsLoadingTextbooks(true);
-      try {
-        const response = await api.getTextbooks(courseCode);
-        const raw = response.data || response || [];
-        setTextbooks(Array.isArray(raw) ? raw : []);
-      } catch (err) {
-        console.error('Failed to fetch textbooks:', err);
-        setTextbooks([]);
-      } finally {
-        setIsLoadingTextbooks(false);
-      }
+      await delay(300);
+      setTextbooks(DUMMY_TEXTBOOKS.filter((t) => t.course_code === courseCode));
+      setIsLoadingTextbooks(false);
     };
 
-    const fetchSessions = async () => {
-      try {
-        const response = await api.getSessions();
-        const raw = response.data || response || [];
-        if (Array.isArray(raw) && raw.length > 0) {
-          setSessions(raw);
-        } else {
-          setSessions(FALLBACK_SESSIONS);
-        }
-      } catch (err) {
-        console.error('Failed to fetch sessions:', err);
-        setSessions(FALLBACK_SESSIONS);
-      }
+    const loadSessions = () => {
+      setSessions(DUMMY_SESSIONS.map((s) => s.value));
     };
 
-    fetchQuestions();
-    fetchTextbooks();
-    fetchSessions();
+    loadQuestions();
+    loadTextbooks();
+    loadSessions();
   }, [courseCode]);
 
   // Filter questions client-side based on selected filters
@@ -291,25 +224,20 @@ export default function CourseDetailScreen() {
     setShowAISheet(false);
 
     try {
-      let message;
+      await delay(1200);
+      let text = '';
       if (action === 'summarize') {
-        message = `Summarize the past questions for the course ${courseCode}. There are ${filteredQuestions.length} questions available. Provide key topics covered, common question types, and recommended preparation tips.`;
+        text = AI_RESPONSES.summarizeQuestions(courseCode, filteredQuestions.length);
       } else if (action === 'solve' && selectedQuestions.length > 0) {
         const question = questions.find((q) => q.id === selectedQuestions[0]);
-        message = `Solve this past question: "${question?.title || 'Selected question'}" for the course ${courseCode}. Provide a step-by-step solution with explanations.`;
+        text = AI_RESPONSES.solveQuestion(question?.title || 'Selected question');
       } else if (action === 'explain') {
-        message = `Explain the key concepts from the course ${courseCode}. Cover the fundamental topics, core principles, mathematical derivations, and real-world applications.`;
+        text = AI_RESPONSES.explain(courseCode);
       } else if (action === 'quiz') {
-        message = `Generate a practice quiz for the course ${courseCode}. Create 4-5 questions that test understanding of key concepts, equations, and problem-solving skills.`;
+        text = AI_RESPONSES.quiz(courseCode);
       }
-
-      if (message) {
-        const response = await api.chatWithAI(null, message);
-        const text = response.data?.response || response.data?.message || response.response || response.message || 'No response received from AI.';
-        setAiResponse(text);
-      }
+      setAiResponse(text || 'No response available.');
     } catch (err) {
-      console.error('AI action failed:', err);
       setAiResponse('Sorry, something went wrong. Please try again later.');
     } finally {
       setAiLoading(false);
@@ -431,44 +359,28 @@ export default function CourseDetailScreen() {
     </Card>
   );
 
-  const renderQuestionsTab = () => (
+  const renderQuestionsTab = () => {
+    const activeFilterCount =
+      (selectedSession !== 'all' ? 1 : 0) + (selectedType !== 'all' ? 1 : 0);
+    const filterLabel = [
+      selectedType !== 'all' ? (selectedType === 'Exam' ? 'Exams' : 'Tests') : 'All Types',
+      selectedSession !== 'all' ? selectedSession : 'All Sessions',
+    ].join(' · ');
+
+    return (
     <View style={styles.tabContent}>
-      {/* Filters */}
-      <View style={styles.filters}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <TouchableOpacity
-            style={[styles.filterChip, selectedSession === 'all' && styles.filterChipActive]}
-            onPress={() => setSelectedSession('all')}
-          >
-            <Text style={[styles.filterText, selectedSession === 'all' && styles.filterTextActive]}>
-              All Sessions
-            </Text>
-          </TouchableOpacity>
-          {sessions.slice(-3).map((session) => (
-            <TouchableOpacity
-              key={session}
-              style={[styles.filterChip, selectedSession === session && styles.filterChipActive]}
-              onPress={() => setSelectedSession(session)}
-            >
-              <Text style={[styles.filterText, selectedSession === session && styles.filterTextActive]}>
-                {session}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-        <View style={styles.typeFilters}>
-          {['all', 'Exam', 'Test'].map((type) => (
-            <TouchableOpacity
-              key={type}
-              style={[styles.typeChip, selectedType === type && styles.typeChipActive]}
-              onPress={() => setSelectedType(type)}
-            >
-              <Text style={[styles.typeChipText, selectedType === type && styles.typeChipTextActive]}>
-                {type === 'all' ? 'All' : type}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+      {/* Compact filter bar */}
+      <View style={styles.filterBar}>
+        <Text style={styles.filterBarLabel} numberOfLines={1}>{filterLabel}</Text>
+        <TouchableOpacity
+          style={[styles.filterBtn, activeFilterCount > 0 && styles.filterBtnActive]}
+          onPress={() => setShowFilterModal(true)}
+        >
+          <Feather name="sliders" size={15} color={activeFilterCount > 0 ? colors.brand.primary : colors.text.muted} />
+          <Text style={[styles.filterBtnText, activeFilterCount > 0 && { color: colors.brand.primary }]}>
+            Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Questions List */}
@@ -493,14 +405,15 @@ export default function CourseDetailScreen() {
         />
       )}
     </View>
-  );
+    );
+  };
 
-  const renderBooksTab = () => (
+  const renderMaterialsTab = () => (
     <View style={styles.tabContent}>
       {isLoadingTextbooks ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.brand.secondary} />
-          <Text style={styles.loadingText}>Loading textbooks...</Text>
+          <Text style={styles.loadingText}>Loading materials...</Text>
         </View>
       ) : textbooks.length > 0 ? (
         <FlatList
@@ -512,9 +425,9 @@ export default function CourseDetailScreen() {
         />
       ) : (
         <EmptyState
-          icon="book"
-          title="No textbooks yet"
-          message={`No recommended textbooks for ${courseCode} have been added.`}
+          icon="book-open"
+          title="No materials yet"
+          message={`No recommended materials for ${courseCode} have been added.`}
         />
       )}
     </View>
@@ -649,9 +562,30 @@ export default function CourseDetailScreen() {
 
         {/* Tab Content */}
         {activeTab === 0 && renderQuestionsTab()}
-        {activeTab === 1 && renderBooksTab()}
+        {activeTab === 1 && renderMaterialsTab()}
         {activeTab === 2 && renderPdfsTab()}
         {activeTab === 3 && renderJotTab()}
+
+        {/* Upload shortcuts bar — shown on Questions and Materials tabs */}
+        {(activeTab === 0 || activeTab === 1) && (
+          <View style={styles.uploadBar}>
+            <TouchableOpacity
+              style={styles.uploadBarBtn}
+              onPress={() => router.push({ pathname: '/upload/question', params: { courseCode, courseName: courseCode } })}
+            >
+              <Feather name="upload" size={15} color={colors.brand.secondary} />
+              <Text style={styles.uploadBarBtnText}>Upload Past Question</Text>
+            </TouchableOpacity>
+            <View style={styles.uploadBarDivider} />
+            <TouchableOpacity
+              style={styles.uploadBarBtn}
+              onPress={() => router.push({ pathname: '/upload/textbook', params: { courseCode } })}
+            >
+              <Feather name="book" size={15} color={colors.brand.accent} />
+              <Text style={[styles.uploadBarBtnText, { color: colors.brand.accent }]}>Upload Material</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Floating AI Button - Only on Questions tab */}
         {activeTab === 0 && (
@@ -663,6 +597,63 @@ export default function CourseDetailScreen() {
             <Feather name="cpu" size={24} color={colors.background.primary} />
           </TouchableOpacity>
         )}
+
+        {/* Filter Modal */}
+        <Modal
+          visible={showFilterModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowFilterModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowFilterModal(false)}
+          >
+            <View style={styles.filterModal}>
+              <View style={styles.bottomSheetHandle} />
+              <View style={styles.filterModalHeader}>
+                <Text style={styles.bottomSheetTitle}>Filter Questions</Text>
+                {(selectedSession !== 'all' || selectedType !== 'all') && (
+                  <TouchableOpacity onPress={() => { setSelectedSession('all'); setSelectedType('all'); }}>
+                    <Text style={{ fontSize: SIZES.sm, color: colors.brand.primary, ...FONTS.medium }}>Clear</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <Text style={styles.filterSectionLabel}>Academic Session</Text>
+              <TouchableOpacity
+                style={[styles.filterOption, selectedSession === 'all' && styles.filterOptionActive]}
+                onPress={() => setSelectedSession('all')}
+              >
+                <Text style={[styles.filterOptionText, selectedSession === 'all' && styles.filterOptionTextActive]}>All Sessions</Text>
+                {selectedSession === 'all' && <Feather name="check" size={16} color={colors.brand.primary} />}
+              </TouchableOpacity>
+              {sessions.map((s) => (
+                <TouchableOpacity
+                  key={s}
+                  style={[styles.filterOption, selectedSession === s && styles.filterOptionActive]}
+                  onPress={() => { setSelectedSession(s); setShowFilterModal(false); }}
+                >
+                  <Text style={[styles.filterOptionText, selectedSession === s && styles.filterOptionTextActive]}>{s}</Text>
+                  {selectedSession === s && <Feather name="check" size={16} color={colors.brand.primary} />}
+                </TouchableOpacity>
+              ))}
+
+              <Text style={[styles.filterSectionLabel, { marginTop: 16 }]}>Question Type</Text>
+              {[['all', 'All Types'], ['Exam', 'Exams Only'], ['Test', 'Tests Only']].map(([val, label]) => (
+                <TouchableOpacity
+                  key={val}
+                  style={[styles.filterOption, selectedType === val && styles.filterOptionActive]}
+                  onPress={() => { setSelectedType(val); setShowFilterModal(false); }}
+                >
+                  <Text style={[styles.filterOptionText, selectedType === val && styles.filterOptionTextActive]}>{label}</Text>
+                  {selectedType === val && <Feather name="check" size={16} color={colors.brand.primary} />}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </TouchableOpacity>
+        </Modal>
 
         {/* AI Bottom Sheet */}
         <Modal
@@ -843,56 +834,115 @@ const createStyles = (colors) => StyleSheet.create({
   tabContent: {
     flex: 1,
   },
-  filters: {
-    padding: SIZES.padding,
+  // Compact filter bar
+  filterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SIZES.padding,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    backgroundColor: colors.background.secondary,
   },
-  filterChip: {
-    backgroundColor: colors.background.tertiary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  filterChipActive: {
-    backgroundColor: colors.brand.primary,
-    borderColor: colors.brand.primary,
-  },
-  filterText: {
+  filterBarLabel: {
+    flex: 1,
     fontSize: SIZES.sm,
-    color: colors.text.secondary,
-    ...FONTS.medium,
+    color: colors.text.muted,
+    ...FONTS.regular,
+    marginRight: 8,
   },
-  filterTextActive: {
-    color: colors.white,
-  },
-  typeFilters: {
+  filterBtn: {
     flexDirection: 'row',
-    marginTop: 12,
-  },
-  typeChip: {
-    backgroundColor: colors.background.tertiary,
-    paddingHorizontal: 16,
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8,
+    borderRadius: SIZES.radiusSm,
+    backgroundColor: colors.background.tertiary,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  typeChipActive: {
-    backgroundColor: colors.brand.secondary,
-    borderColor: colors.brand.secondary,
+  filterBtnActive: {
+    borderColor: colors.brand.primary,
+    backgroundColor: colors.tint.primary,
   },
-  typeChipText: {
+  filterBtnText: {
     fontSize: SIZES.sm,
-    color: colors.text.secondary,
+    color: colors.text.muted,
     ...FONTS.medium,
   },
-  typeChipTextActive: {
-    color: colors.background.primary,
+  // Filter modal
+  filterModal: {
+    backgroundColor: colors.background.secondary,
+    borderTopLeftRadius: SIZES.radiusLg,
+    borderTopRightRadius: SIZES.radiusLg,
+    padding: SIZES.padding * 1.5,
+    paddingBottom: 32,
+    marginTop: 'auto',
+  },
+  filterModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  filterSectionLabel: {
+    fontSize: SIZES.xs,
+    color: colors.text.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+    ...FONTS.semibold,
+  },
+  filterOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: SIZES.radiusSm,
+    marginBottom: 4,
+  },
+  filterOptionActive: {
+    backgroundColor: colors.tint.primary,
+  },
+  filterOptionText: {
+    fontSize: SIZES.base,
+    color: colors.text.secondary,
+    ...FONTS.regular,
+  },
+  filterOptionTextActive: {
+    color: colors.brand.primary,
+    ...FONTS.semibold,
+  },
+  // Upload bar
+  uploadBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background.secondary,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingVertical: 10,
+    paddingHorizontal: SIZES.padding,
+  },
+  uploadBarBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 6,
+  },
+  uploadBarBtnText: {
+    fontSize: SIZES.sm,
+    color: colors.brand.secondary,
+    ...FONTS.medium,
+  },
+  uploadBarDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: colors.border,
   },
   listContent: {
     paddingHorizontal: SIZES.padding,

@@ -3,7 +3,6 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import * as ScreenCapture from 'expo-screen-capture';
 import { ToastProvider } from '../components/shared/Toast';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import useAuthStore from '../store/authStore';
@@ -14,8 +13,8 @@ function RootLayoutContent() {
 
   useEffect(() => {
     initialize();
-    // Prevent screenshots and screen recording globally
-    ScreenCapture.preventScreenCaptureAsync();
+    // NOTE: Screenshot/screen recording prevention is disabled during development.
+    // Re-enable before launch — see LAUNCH_CHECKLIST.md
   }, []);
 
   return (

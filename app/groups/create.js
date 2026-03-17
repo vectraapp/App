@@ -15,7 +15,7 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
-import api from '../../services/api';
+import { delay } from '../../services/dummyData';
 
 export default function CreateGroupScreen() {
   const router = useRouter();
@@ -35,18 +35,8 @@ export default function CreateGroupScreen() {
     setError('');
     setLoading(true);
     try {
-      const response = await api.createGroup({
-        name: name.trim(),
-        course_code: courseCode.trim(),
-        course_name: courseName.trim() || undefined,
-        description: description.trim() || undefined,
-      });
-      if (response.success && response.data?.id) {
-        router.replace({
-          pathname: '/groups/[id]',
-          params: { id: response.data.id, name: response.data.name },
-        });
-      }
+      await delay(800);
+      router.back();
     } catch (err) {
       setError(err.message || 'Failed to create group');
     } finally {

@@ -14,7 +14,7 @@ import { Feather } from '@expo/vector-icons';
 import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { EmptyState, Card } from '../../components/shared';
-import api from '../../services/api';
+import { delay, DUMMY_GROUPS } from '../../services/dummyData';
 
 export default function GroupsScreen() {
   const router = useRouter();
@@ -28,8 +28,8 @@ export default function GroupsScreen() {
   const fetchGroups = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const response = await api.getMyGroups();
-      setGroups(response.data || []);
+      await delay(400);
+      setGroups(DUMMY_GROUPS);
     } catch {
       setGroups([]);
     } finally {

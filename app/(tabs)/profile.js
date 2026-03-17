@@ -233,6 +233,28 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {/* Activity Section */}
+        <View style={styles.menuSection}>
+          <Text style={styles.menuSectionTitle}>Activity</Text>
+          <Card style={styles.menuCard}>
+            <MenuItem
+              colors={colors}
+              icon="zap"
+              label="Study Streaks"
+              sublabel="Your progress and badges"
+              onPress={() => router.push('/streaks')}
+            />
+            <MenuItem
+              colors={colors}
+              icon="bookmark"
+              label="Bookmarks"
+              sublabel="Saved questions"
+              onPress={() => router.push('/bookmarks')}
+              isLast
+            />
+          </Card>
+        </View>
+
         {/* Sharing Section */}
         <View style={styles.menuSection}>
           <Text style={styles.menuSectionTitle}>Sharing</Text>
@@ -250,13 +272,6 @@ export default function ProfileScreen() {
               label="Shared with Me"
               sublabel="Content others shared"
               onPress={() => router.push('/sharing/shared-with-me')}
-            />
-            <MenuItem
-              colors={colors}
-              icon="share-2"
-              label="My Shares"
-              sublabel="Manage your shares"
-              onPress={() => router.push('/sharing/my-shares')}
               isLast
             />
           </Card>
@@ -293,53 +308,20 @@ export default function ProfileScreen() {
 
         {/* Settings Section */}
         <View style={styles.menuSection}>
-          <Text style={styles.menuSectionTitle}>Settings</Text>
+          <Text style={styles.menuSectionTitle}>Settings & Support</Text>
           <Card style={styles.menuCard}>
             <MenuItem
               colors={colors}
-              icon="moon"
-              label="Appearance"
-              sublabel="Theme and display"
-              onPress={() => router.push('/settings/appearance')}
-            />
-            <MenuItem
-              colors={colors}
-              icon="bell"
-              label="Notifications"
-              sublabel="Push and email alerts"
-              onPress={() => router.push('/settings/notifications')}
-              isLast
-            />
-          </Card>
-        </View>
-
-        {/* About Section */}
-        <View style={styles.menuSection}>
-          <Text style={styles.menuSectionTitle}>About</Text>
-          <Card style={styles.menuCard}>
-            <MenuItem
-              colors={colors}
-              icon="info"
-              label="About Vectra"
-              onPress={() => router.push('/about')}
+              icon="settings"
+              label="Settings"
+              sublabel="Appearance, notifications, legal"
+              onPress={() => router.push('/settings')}
             />
             <MenuItem
               colors={colors}
               icon="help-circle"
               label="Help and Support"
               onPress={() => router.push('/support')}
-            />
-            <MenuItem
-              colors={colors}
-              icon="shield"
-              label="Privacy Policy"
-              onPress={() => router.push('/legal/privacy')}
-            />
-            <MenuItem
-              colors={colors}
-              icon="file-text"
-              label="Terms of Service"
-              onPress={() => router.push('/legal/terms')}
               isLast
             />
           </Card>

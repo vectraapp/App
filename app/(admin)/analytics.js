@@ -10,7 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { FONTS, SIZES, SHADOWS } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
-import { delay, DUMMY_ANALYTICS } from '../../services/dummyData';
+import { DUMMY_ANALYTICS, delay } from '../../services/dummyData';
 
 const DAU_MAX_HEIGHT = 80;
 

@@ -13,7 +13,7 @@ import { Feather } from '@expo/vector-icons';
 import { FONTS, SIZES, SHADOWS } from '../constants/theme';
 import { useTheme } from '../context/ThemeContext';
 import { EmptyState } from '../components/shared';
-import { delay, DUMMY_BOOKMARKS } from '../services/dummyData';
+import { DUMMY_BOOKMARKS, delay } from '../services/dummyData';
 
 const TABS = ['All', 'Questions', 'Lectures'];
 
@@ -57,10 +57,23 @@ export default function BookmarksScreen() {
     setBookmarks((prev) => prev.filter((b) => b.id !== id));
   };
 
+  const handlePress = (item) => {
+    switch (item.type) {
+      case 'question':
+        router.push(`/question/${item.content_id}`);
+        break;
+      case 'lecture':
+        router.push(`/lecture/${item.content_id}`);
+        break;
+      default:
+        break;
+    }
+  };
+
   const renderItem = ({ item }) => {
     const isQuestion = item.type === 'question';
     return (
-      <View style={styles.card}>
+      <TouchableOpacity style={styles.card} onPress={() => handlePress(item)} activeOpacity={0.8}>
         <View style={[styles.iconContainer, { backgroundColor: isQuestion ? colors.tint.primary : colors.tint.secondary }]}>
           <Feather
             name={isQuestion ? 'file-text' : 'mic'}
@@ -77,14 +90,11 @@ export default function BookmarksScreen() {
           <Text style={styles.cardTime}>{getRelativeTime(item.bookmarked_at)}</Text>
         </View>
         <View style={styles.cardActions}>
-          <TouchableOpacity style={styles.actionBtn}>
-            <Feather name="bookmark" size={18} color={colors.brand.warning} />
-          </TouchableOpacity>
           <TouchableOpacity style={styles.actionBtn} onPress={() => handleRemove(item.id)}>
             <Feather name="trash-2" size={18} color={colors.brand.error} />
           </TouchableOpacity>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
