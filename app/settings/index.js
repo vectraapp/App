@@ -20,6 +20,7 @@ export default function SettingsScreen() {
   const { colors } = useTheme();
   const styles = createStyles(colors);
   const deleteAccount = useAuthStore((s) => s.deleteAccount);
+  const semester = useAuthStore((s) => s.semester);
   const [deleting, setDeleting] = useState(false);
 
   const handleDeleteAccount = () => {
@@ -63,6 +64,18 @@ export default function SettingsScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {/* Account Section */}
+          <Text style={styles.sectionTitle}>Account</Text>
+          <Card style={styles.menuCard}>
+            <SettingItem
+              icon="book-open"
+              label="Current Semester"
+              sublabel={semester === 1 ? 'First Semester' : 'Second Semester'}
+              onPress={() => router.push('/settings/semester')}
+              isLast
+            />
+          </Card>
+
           {/* Appearance Section */}
           <Text style={styles.sectionTitle}>Appearance</Text>
           <Card style={styles.menuCard}>

@@ -6,10 +6,14 @@ const useAuthStore = create((set, get) => ({
   isAuthenticated: false,
   isLoading: true,
   onboardingCompleted: false,
+  semester: 1,
 
   initialize: async () => {
     try {
       const userJson = await AsyncStorage.getItem('mockUser');
+      const semesterRaw = await AsyncStorage.getItem('user_semester');
+      const semester = semesterRaw ? parseInt(semesterRaw, 10) : 1;
+
       if (userJson) {
         const user = JSON.parse(userJson);
         const profileJson = await AsyncStorage.getItem(`profile_${user.email}`);
@@ -18,16 +22,23 @@ const useAuthStore = create((set, get) => ({
           user,
           isAuthenticated: true,
           onboardingCompleted: profile.onboardingCompleted || false,
+          semester,
           isLoading: false,
         });
         console.log('[Auth] Mock session restored for', user.email);
         return;
       }
-      set({ isLoading: false });
+      set({ semester, isLoading: false });
     } catch (error) {
       console.error('[Auth] Initialize error:', error);
       set({ isLoading: false });
     }
+  },
+
+  setSemester: async (id) => {
+    await AsyncStorage.setItem('user_semester', String(id));
+    set({ semester: id });
+    console.log('[Auth] Semester changed to', id);
   },
 
   login: async (email, password) => {

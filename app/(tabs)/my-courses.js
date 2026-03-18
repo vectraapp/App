@@ -20,6 +20,7 @@ export default function MyCoursesScreen() {
   const router = useRouter();
   const getProfile = useAuthStore((s) => s.getProfile);
   const user = useAuthStore((s) => s.user);
+  const semester = useAuthStore((s) => s.semester);
   const { colors } = useTheme();
 
   const [profile, setProfile] = useState(null);
@@ -28,14 +29,15 @@ export default function MyCoursesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredCourses = useMemo(() => {
-    if (!searchQuery.trim()) return courses;
+    let result = courses.filter((c) => (c.semester ?? 1) === semester);
+    if (!searchQuery.trim()) return result;
     const q = searchQuery.toLowerCase();
-    return courses.filter(
+    return result.filter(
       (c) =>
         (c.code || c.course_code || '').toLowerCase().includes(q) ||
         (c.name || c.title || '').toLowerCase().includes(q)
     );
-  }, [courses, searchQuery]);
+  }, [courses, searchQuery, semester]);
 
   const styles = createStyles(colors);
 
@@ -104,7 +106,7 @@ export default function MyCoursesScreen() {
               Hello, {user?.display_name?.split(' ')[0] || user?.displayName?.split(' ')[0] || 'Student'}
             </Text>
             <Text style={styles.headerSubtitle}>
-              {profile?.departmentName || 'Department'} · {profile?.level ? `Part ${profile.level}` : 'Level'}
+              {profile?.departmentName || 'Department'} · {profile?.level ? `Part ${profile.level}` : 'Level'} · {semester === 1 ? '1st' : '2nd'} Semester
             </Text>
           </View>
           <TouchableOpacity
@@ -155,7 +157,11 @@ export default function MyCoursesScreen() {
           <EmptyState
             icon="book"
             title="No courses found"
-            message="Complete your profile setup to see courses for your department and level."
+            message={
+              searchQuery
+                ? `No ${semester === 1 ? 'first' : 'second'} semester courses match your search.`
+                : `No ${semester === 1 ? 'first' : 'second'} semester courses found for your level.`
+            }
           />
         )}
 
