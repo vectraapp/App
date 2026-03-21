@@ -13,7 +13,8 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { FONTS, SIZES } from '../../constants/theme';
-import { Button, Card, Loader } from '../../components/shared';
+import { Button, Card } from '../../components/shared';
+import { SkeletonProfile } from '../../components/shared/Skeleton';
 import { useToast } from '../../components/shared/Toast';
 import { useTheme } from '../../context/ThemeContext';
 import useAuthStore from '../../store/authStore';
@@ -99,7 +100,7 @@ export default function ProfileScreen() {
   const styles = createStyles(colors);
 
   if (loading) {
-    return <Loader fullScreen />;
+    return <SkeletonProfile />;
   }
 
   const displayName = user?.displayName || user?.display_name || profile?.displayName || profile?.display_name || '';

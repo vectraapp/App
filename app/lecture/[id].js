@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import PagerView from 'react-native-pager-view';
 import {
   View,
   Text,
@@ -72,7 +73,8 @@ export default function LectureDetailScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const styles = createStyles(colors);
-  const [activeTab, setActiveTab] = useState('notes');
+  const [activeTab, setActiveTab] = useState(0);
+  const pagerRef = useRef(null);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [photoViewerVisible, setPhotoViewerVisible] = useState(false);
   const [lecture, setLecture] = useState(null);
@@ -369,21 +371,6 @@ export default function LectureDetailScreen() {
     </ScrollView>
   );
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'notes':
-        return renderNotesTab();
-      case 'photos':
-        return renderPhotosTab();
-      case 'transcript':
-        return renderTranscriptTab();
-      case 'ai':
-        return renderAIToolsTab();
-      default:
-        return renderNotesTab();
-    }
-  };
-
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
@@ -481,21 +468,24 @@ export default function LectureDetailScreen() {
 
         {/* Tabs */}
         <View style={styles.tabBar}>
-          {TABS.map((tab) => (
+          {TABS.map((tab, index) => (
             <TouchableOpacity
               key={tab.id}
-              style={[styles.tab, activeTab === tab.id && styles.tabActive]}
-              onPress={() => setActiveTab(tab.id)}
+              style={[styles.tab, activeTab === index && styles.tabActive]}
+              onPress={() => {
+                setActiveTab(index);
+                pagerRef.current?.setPage(index);
+              }}
             >
               <Feather
                 name={tab.icon}
                 size={16}
-                color={activeTab === tab.id ? colors.brand.secondary : colors.text.muted}
+                color={activeTab === index ? colors.brand.secondary : colors.text.muted}
               />
-              <Text style={[styles.tabLabel, activeTab === tab.id && styles.tabLabelActive]}>
+              <Text style={[styles.tabLabel, activeTab === index && styles.tabLabelActive]}>
                 {tab.label}
               </Text>
-              {tab.id === 'photos' && photos.length > 0 && (
+              {index === 1 && photos.length > 0 && (
                 <View style={styles.tabBadge}>
                   <Text style={styles.tabBadgeText}>{photos.length}</Text>
                 </View>
@@ -504,10 +494,18 @@ export default function LectureDetailScreen() {
           ))}
         </View>
 
-        {/* Tab Content */}
-        <View style={styles.tabContentWrapper}>
-          {renderTabContent()}
-        </View>
+        {/* Tab Content — swipeable */}
+        <PagerView
+          ref={pagerRef}
+          style={styles.tabContentWrapper}
+          initialPage={0}
+          onPageSelected={(e) => setActiveTab(e.nativeEvent.position)}
+        >
+          <View key="0" style={{ flex: 1 }}>{renderNotesTab()}</View>
+          <View key="1" style={{ flex: 1 }}>{renderPhotosTab()}</View>
+          <View key="2" style={{ flex: 1 }}>{renderTranscriptTab()}</View>
+          <View key="3" style={{ flex: 1 }}>{renderAIToolsTab()}</View>
+        </PagerView>
 
         {/* Share Sheet */}
         <ShareLectureSheet

@@ -4,9 +4,16 @@ import { Feather } from '@expo/vector-icons';
 import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
-import { runOnJS, useSharedValue } from 'react-native-reanimated';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  runOnJS,
+} from 'react-native-reanimated';
 
 const TAB_NAMES = ['my-courses', 'lectures', 'streaks', 'profile'];
+
+const SPRING_CONFIG = { damping: 20, stiffness: 200, mass: 0.5 };
 
 export default function TabsLayout() {
   const { colors } = useTheme();
@@ -17,7 +24,9 @@ export default function TabsLayout() {
 
   useEffect(() => {
     const idx = TAB_NAMES.findIndex((n) => pathname.endsWith(n));
-    if (idx !== -1) activeIndex.value = idx;
+    if (idx !== -1) {
+      activeIndex.value = withSpring(idx, SPRING_CONFIG);
+    }
   }, [pathname]);
 
   const goToTab = (index) => {
@@ -31,8 +40,12 @@ export default function TabsLayout() {
     .failOffsetY([-12, 12])
     .onEnd((e) => {
       'worklet';
-      if (e.translationX < -50) runOnJS(goToTab)(activeIndex.value + 1);
-      else if (e.translationX > 50) runOnJS(goToTab)(activeIndex.value - 1);
+      const current = Math.round(activeIndex.value);
+      if (e.translationX < -50 && e.velocityX < 0) {
+        runOnJS(goToTab)(current + 1);
+      } else if (e.translationX > 50 && e.velocityX > 0) {
+        runOnJS(goToTab)(current - 1);
+      }
     });
 
   return (
@@ -52,8 +65,9 @@ export default function TabsLayout() {
             backgroundColor: colors.background.navbar,
             borderTopColor: colors.border,
             borderTopWidth: 1,
-            height: 60,
+            height: 72,
             paddingTop: 6,
+            paddingBottom: 12,
           },
         }}
       >

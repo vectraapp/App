@@ -12,7 +12,8 @@ import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { FONTS, SIZES, SHADOWS } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
-import { Card, EmptyState, Loader } from '../../components/shared';
+import { Card, EmptyState } from '../../components/shared';
+import { SkeletonCourseList } from '../../components/shared/Skeleton';
 import useAuthStore from '../../store/authStore';
 import { delay, DUMMY_COURSES } from '../../services/dummyData';
 
@@ -93,7 +94,7 @@ export default function MyCoursesScreen() {
   };
 
   if (loading) {
-    return <Loader fullScreen />;
+    return <SkeletonCourseList />;
   }
 
   return (

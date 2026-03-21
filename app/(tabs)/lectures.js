@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -15,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Card, EmptyState } from '../../components/shared';
+import { SkeletonLectureList } from '../../components/shared/Skeleton';
 import { delay, DUMMY_LECTURES } from '../../services/dummyData';
 
 function formatDuration(seconds) {
@@ -153,9 +153,7 @@ export default function LecturesScreen() {
 
         {/* Lecture List */}
         {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.brand.secondary} />
-          </View>
+          <SkeletonLectureList />
         ) : lectures.length > 0 ? (
           <FlatList
             data={lectures}

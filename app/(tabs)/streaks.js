@@ -5,13 +5,13 @@ import {
   StyleSheet,
   ScrollView,
   FlatList,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { FONTS, SIZES, SHADOWS } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { DUMMY_STUDY_STREAK, delay } from '../../services/dummyData';
+import { SkeletonStreaks } from '../../components/shared/Skeleton';
 
 const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
@@ -40,14 +40,7 @@ export default function StreaksTab() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Study Streaks</Text>
-        </View>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.brand.secondary} />
-        </View>
-      </SafeAreaView>
+      <SkeletonStreaks />
     );
   }
 

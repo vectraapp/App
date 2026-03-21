@@ -12,7 +12,6 @@ import {
   ActivityIndicator,
   Share,
   Alert,
-  Platform,
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,10 +19,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system/legacy';
 import { FONTS, SIZES, SHADOWS } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Card, EmptyState, Button } from '../../components/shared';
+import PDFViewer from '../../components/viewers/PDFViewer';
 import { delay, DUMMY_QUESTIONS, DUMMY_TEXTBOOKS, DUMMY_SESSIONS } from '../../services/dummyData';
 import { AI_RESPONSES } from '../../constants/mockData';
 
@@ -50,6 +49,7 @@ export default function CourseDetailScreen() {
   const [aiResponse, setAiResponse] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [pdfUploading, setPdfUploading] = useState(false);
+  const [pdfViewer, setPdfViewer] = useState(null); // { url, title }
 
   // API data state
   const [questions, setQuestions] = useState([]);
@@ -178,21 +178,9 @@ export default function CourseDetailScreen() {
     await savePdfs(updatedPdfs);
   };
 
-  // Open a local PDF file
-  const openPdf = async (pdf) => {
-    try {
-      if (Platform.OS === 'android') {
-        // On Android, get content URI and open with system viewer
-        const cUri = await FileSystem.getContentUriAsync(pdf.uri);
-        await Linking.openURL(cUri);
-      } else {
-        // On iOS, open directly
-        await Linking.openURL(pdf.uri);
-      }
-    } catch (err) {
-      console.error('Failed to open PDF:', err);
-      Alert.alert('Cannot Open PDF', 'Unable to open this PDF. Please install a PDF viewer app.');
-    }
+  // Open a local PDF file in-app
+  const openPdf = (pdf) => {
+    setPdfViewer({ url: pdf.uri, title: pdf.name });
   };
 
   // Share course
@@ -736,6 +724,14 @@ export default function CourseDetailScreen() {
             </View>
           </TouchableOpacity>
         </Modal>
+
+        {/* In-App PDF Viewer */}
+        <PDFViewer
+          visible={!!pdfViewer}
+          url={pdfViewer?.url}
+          title={pdfViewer?.title}
+          onClose={() => setPdfViewer(null)}
+        />
 
         {/* AI Response Modal */}
         <Modal
