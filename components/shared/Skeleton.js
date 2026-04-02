@@ -104,6 +104,72 @@ export function SkeletonCourseList() {
   );
 }
 
+// ─── SkeletonQuestionList — Course detail Questions tab ──────────────────────
+
+function QuestionCardSkeleton({ colors }) {
+  return (
+    <View style={[skStyles.card, { backgroundColor: colors.background.secondary, borderColor: colors.border, flexDirection: 'row', alignItems: 'flex-start' }]}>
+      {/* Checkbox */}
+      <SkeletonBox width={20} height={20} borderRadius={5} style={{ marginRight: 12, marginTop: 2 }} />
+      <View style={{ flex: 1 }}>
+        {/* Type badge + session */}
+        <View style={skStyles.row}>
+          <SkeletonBox width={52} height={22} borderRadius={4} />
+          <SkeletonBox width={80} height={14} borderRadius={4} />
+        </View>
+        {/* Title */}
+        <SkeletonBox width="90%" height={15} style={{ marginTop: 10 }} />
+        <SkeletonBox width="65%" height={13} style={{ marginTop: 6 }} />
+        {/* Footer */}
+        <View style={[skStyles.row, { marginTop: 10 }]}>
+          <SkeletonBox width={90} height={12} borderRadius={4} />
+          <SkeletonBox width={40} height={22} borderRadius={11} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+export function SkeletonQuestionList({ count = 4 }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ paddingHorizontal: SIZES.padding * 1.5, paddingTop: 8 }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <QuestionCardSkeleton key={i} colors={colors} />
+      ))}
+    </View>
+  );
+}
+
+// ─── SkeletonMaterialList — Course detail Materials tab ───────────────────────
+
+function MaterialCardSkeleton({ colors }) {
+  return (
+    <View style={[skStyles.card, { backgroundColor: colors.background.secondary, borderColor: colors.border, flexDirection: 'row', alignItems: 'center' }]}>
+      <SkeletonBox width={48} height={48} borderRadius={10} style={{ marginRight: 14 }} />
+      <View style={{ flex: 1 }}>
+        <SkeletonBox width="80%" height={15} borderRadius={5} />
+        <SkeletonBox width="55%" height={13} borderRadius={5} style={{ marginTop: 6 }} />
+        <View style={[skStyles.row, { marginTop: 8 }]}>
+          <SkeletonBox width={70} height={20} borderRadius={10} />
+          <SkeletonBox width={50} height={13} borderRadius={4} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+export function SkeletonMaterialList({ count = 3 }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ paddingHorizontal: SIZES.padding * 1.5, paddingTop: 8 }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <MaterialCardSkeleton key={i} colors={colors} />
+      ))}
+    </View>
+  );
+}
+
 // ─── SkeletonLectureList — Lectures tab ──────────────────────────────────────
 
 function LectureCardSkeleton({ colors }) {

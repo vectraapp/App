@@ -7,9 +7,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   Image,
   Modal,
+  Alert,
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,7 +18,7 @@ import { FONTS, SIZES } from '../../constants/theme';
 import { Card, EmptyState } from '../../components/shared';
 import { useToast } from '../../components/shared/Toast';
 import { useTheme } from '../../context/ThemeContext';
-import { delay, DUMMY_PENDING_QUESTIONS } from '../../services/dummyData';
+import { api } from '../../services/api';
 import PDFViewer from '../../components/viewers/PDFViewer';
 
 export default function AdminQuestions() {
@@ -27,7 +27,7 @@ export default function AdminQuestions() {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [actionLoading, setActionLoading] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
   const [previewItem, setPreviewItem] = useState(null);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
   const [showImageViewer, setShowImageViewer] = useState(false);
@@ -53,10 +53,11 @@ export default function AdminQuestions() {
 
   const loadQuestions = async () => {
     try {
-      await delay(400);
-      setQuestions(DUMMY_PENDING_QUESTIONS);
+      const res = await api.get('/uploads/admin/all?upload_type=past_question');
+      const data = res?.data || [];
+      setQuestions(Array.isArray(data) ? data : []);
     } catch (err) {
-      showToast('error', 'Failed to load pending questions');
+      showToast('error', 'Failed to load questions');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -72,56 +73,36 @@ export default function AdminQuestions() {
     loadQuestions();
   }, []);
 
-  const handleApprove = async (id) => {
-    setActionLoading(id);
-    try {
-      await delay(600);
-      setQuestions((prev) => prev.filter((q) => q.id !== id));
-      showToast('success', 'Question approved successfully');
-    } catch (err) {
-      showToast('error', 'Failed to approve question');
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleReject = (id) => {
-    Alert.prompt(
-      'Reject Question',
-      'Please provide a reason for rejection:',
+  const handleDelete = (item) => {
+    Alert.alert(
+      'Delete Question',
+      `Delete ${item.course_code || 'this question'}? This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Reject',
+          text: 'Delete',
           style: 'destructive',
-          onPress: async (reason) => {
-            if (!reason || !reason.trim()) {
-              showToast('error', 'Please provide a rejection reason');
-              return;
-            }
-            setActionLoading(id);
+          onPress: async () => {
+            setDeletingId(item.id);
             try {
-              await delay(600);
-              setQuestions((prev) => prev.filter((q) => q.id !== id));
-              showToast('success', 'Question rejected');
+              await api.delete(`/uploads/admin/${item.id}`);
+              setQuestions((prev) => prev.filter((q) => q.id !== item.id));
+              showToast('success', 'Question deleted');
             } catch (err) {
-              showToast('error', 'Failed to reject question');
+              showToast('error', err.message || 'Failed to delete');
             } finally {
-              setActionLoading(null);
+              setDeletingId(null);
             }
           },
         },
       ],
-      'plain-text',
-      '',
     );
   };
 
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
     try {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', {
+      return new Date(dateStr).toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
@@ -134,17 +115,43 @@ export default function AdminQuestions() {
   const styles = createStyles(colors);
 
   const renderQuestion = ({ item }) => {
-    const isProcessing = actionLoading === item.id;
+    const isDeleting = deletingId === item.id;
+    // Determine source: if user_email matches an admin pattern or admin_notes/published_by set
+    const isAdminUpload = item.published_by != null || item.status === 'approved' && item.user_email?.includes('admin');
+    const uploaderLabel = item.user_email || 'Unknown';
 
     return (
       <Card style={styles.card}>
         <View style={styles.cardHeader}>
           <View style={styles.courseBadge}>
-            <Text style={styles.courseBadgeText}>
-              {item.course_code || 'N/A'}
+            <Text style={styles.courseBadgeText}>{item.course_code || 'N/A'}</Text>
+          </View>
+          <View style={[
+            styles.sourceBadge,
+            item.published_by ? styles.sourceBadgeAdmin : styles.sourceBadgeUser,
+          ]}>
+            <Feather
+              name={item.published_by ? 'shield' : 'user'}
+              size={10}
+              color={item.published_by ? colors.brand.secondary : colors.text.muted}
+            />
+            <Text style={[
+              styles.sourceText,
+              item.published_by ? styles.sourceTextAdmin : styles.sourceTextUser,
+            ]}>
+              {item.published_by ? 'Admin' : 'User'}
             </Text>
           </View>
-          <Text style={styles.dateText}>{formatDate(item.created_at)}</Text>
+          <TouchableOpacity
+            style={styles.deleteBtn}
+            onPress={() => handleDelete(item)}
+            disabled={isDeleting}
+          >
+            {isDeleting
+              ? <ActivityIndicator size="small" color="#EF4444" />
+              : <Feather name="trash-2" size={16} color="#EF4444" />
+            }
+          </TouchableOpacity>
         </View>
 
         <View style={styles.cardBody}>
@@ -154,18 +161,23 @@ export default function AdminQuestions() {
               <Text style={styles.infoText}>{item.academic_session}</Text>
             </View>
           ) : null}
-          {item.question_type ? (
+          {(item.exam_type || item.question_type) ? (
             <View style={styles.infoRow}>
               <Feather name="tag" size={14} color={colors.text.muted} />
-              <Text style={styles.infoText}>{item.question_type}</Text>
+              <Text style={styles.infoText}>{item.exam_type || item.question_type}</Text>
             </View>
           ) : null}
-          {item.uploader_email ? (
+          {item.semester ? (
             <View style={styles.infoRow}>
-              <Feather name="user" size={14} color={colors.text.muted} />
-              <Text style={styles.infoText}>{item.uploader_email}</Text>
+              <Feather name="layers" size={14} color={colors.text.muted} />
+              <Text style={styles.infoText}>{item.semester}</Text>
             </View>
           ) : null}
+          <View style={styles.infoRow}>
+            <Feather name="user" size={14} color={colors.text.muted} />
+            <Text style={styles.infoText} numberOfLines={1}>{uploaderLabel}</Text>
+            <Text style={styles.dateText}>{formatDate(item.created_at)}</Text>
+          </View>
         </View>
 
         {(item.file_url || item.image_url) && (
@@ -174,46 +186,23 @@ export default function AdminQuestions() {
             onPress={() => handlePreview(item)}
             activeOpacity={0.7}
           >
-            <Feather name={isPdf(item.file_url || item.image_url) ? 'file-text' : 'image'} size={16} color={colors.brand.secondary} />
+            <Feather
+              name={isPdf(item.file_url || item.image_url) ? 'file-text' : 'image'}
+              size={16}
+              color={colors.brand.secondary}
+            />
             <Text style={styles.previewBtnText}>View Document</Text>
           </TouchableOpacity>
         )}
-
-        <View style={styles.cardActions}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.approveButton]}
-            onPress={() => handleApprove(item.id)}
-            disabled={isProcessing}
-            activeOpacity={0.7}
-          >
-            {isProcessing ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <>
-                <Feather name="check" size={16} color="#FFFFFF" />
-                <Text style={styles.actionButtonText}>Approve</Text>
-              </>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.rejectButton]}
-            onPress={() => handleReject(item.id)}
-            disabled={isProcessing}
-            activeOpacity={0.7}
-          >
-            <Feather name="x" size={16} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>Reject</Text>
-          </TouchableOpacity>
-        </View>
       </Card>
     );
   };
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Review Questions</Text>
+        <Text style={styles.headerTitle}>Questions</Text>
+        <Text style={styles.countText}>{questions.length} total</Text>
       </View>
 
       {loading ? (
@@ -237,24 +226,25 @@ export default function AdminQuestions() {
           }
           ListEmptyComponent={
             <EmptyState
-              icon="check-circle"
-              title="All caught up!"
-              message="No pending questions to review"
+              icon="file-text"
+              title="No questions yet"
+              message="Questions uploaded by admins and users will appear here"
             />
           }
         />
       )}
-      {/* PDF Viewer Modal */}
+
+      {/* PDF Viewer */}
       {previewItem && isPdf(previewItem.file_url || previewItem.image_url) && (
         <PDFViewer
           url={previewItem.file_url || previewItem.image_url}
-          title={`${previewItem.course_code || ''} ${previewItem.question_type || ''}`}
+          title={`${previewItem.course_code || ''} ${previewItem.exam_type || ''}`}
           visible={showPdfViewer}
           onClose={() => { setShowPdfViewer(false); setPreviewItem(null); }}
         />
       )}
 
-      {/* Image Viewer Modal */}
+      {/* Image Viewer */}
       {previewItem && !isPdf(previewItem.file_url || previewItem.image_url) && (
         <Modal
           visible={showImageViewer}
@@ -303,6 +293,11 @@ const createStyles = (colors) =>
       color: colors.text.primary,
       ...FONTS.bold,
     },
+    countText: {
+      fontSize: SIZES.sm,
+      color: colors.text.muted,
+      ...FONTS.regular,
+    },
     loadingContainer: {
       flex: 1,
       justifyContent: 'center',
@@ -318,8 +313,8 @@ const createStyles = (colors) =>
     },
     cardHeader: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'center',
+      gap: 8,
       marginBottom: 12,
     },
     courseBadge: {
@@ -333,13 +328,41 @@ const createStyles = (colors) =>
       color: colors.brand.primary,
       ...FONTS.semibold,
     },
-    dateText: {
-      fontSize: SIZES.sm,
+    sourceBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 6,
+      gap: 4,
+    },
+    sourceBadgeAdmin: {
+      backgroundColor: colors.tint.secondary,
+    },
+    sourceBadgeUser: {
+      backgroundColor: colors.background.tertiary,
+    },
+    sourceText: {
+      fontSize: SIZES.xs,
+      ...FONTS.semibold,
+    },
+    sourceTextAdmin: {
+      color: colors.brand.secondary,
+    },
+    sourceTextUser: {
       color: colors.text.muted,
-      ...FONTS.regular,
+    },
+    deleteBtn: {
+      marginLeft: 'auto',
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      backgroundColor: 'rgba(239,68,68,0.1)',
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     cardBody: {
-      marginBottom: 14,
+      marginBottom: 12,
     },
     infoRow: {
       flexDirection: 'row',
@@ -350,31 +373,13 @@ const createStyles = (colors) =>
       fontSize: SIZES.md,
       color: colors.text.secondary,
       marginLeft: 8,
+      flex: 1,
       ...FONTS.regular,
     },
-    cardActions: {
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-      gap: 10,
-    },
-    actionButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: SIZES.radiusSm,
-    },
-    approveButton: {
-      backgroundColor: '#10B981',
-    },
-    rejectButton: {
-      backgroundColor: '#EF4444',
-    },
-    actionButtonText: {
+    dateText: {
       fontSize: SIZES.sm,
-      color: '#FFFFFF',
-      marginLeft: 6,
-      ...FONTS.semibold,
+      color: colors.text.muted,
+      ...FONTS.regular,
     },
     previewBtn: {
       flexDirection: 'row',
@@ -383,7 +388,6 @@ const createStyles = (colors) =>
       paddingHorizontal: 14,
       paddingVertical: 10,
       borderRadius: SIZES.radius,
-      marginBottom: 14,
       gap: 8,
     },
     previewBtnText: {

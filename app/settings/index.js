@@ -20,8 +20,14 @@ export default function SettingsScreen() {
   const { colors } = useTheme();
   const styles = createStyles(colors);
   const deleteAccount = useAuthStore((s) => s.deleteAccount);
+  const resetOnboarding = useAuthStore((s) => s.resetOnboarding);
   const semester = useAuthStore((s) => s.semester);
   const [deleting, setDeleting] = useState(false);
+
+  const handleChangeProfile = () => {
+    resetOnboarding();
+    router.replace('/(auth)/onboarding');
+  };
 
   const handleDeleteAccount = () => {
     Alert.alert(
@@ -72,6 +78,12 @@ export default function SettingsScreen() {
               label="Current Semester"
               sublabel={semester === 1 ? 'First Semester' : 'Second Semester'}
               onPress={() => router.push('/settings/semester')}
+            />
+            <SettingItem
+              icon="edit-2"
+              label="Change Department / Level"
+              sublabel="Update your university profile"
+              onPress={handleChangeProfile}
               isLast
             />
           </Card>

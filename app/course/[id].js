@@ -23,8 +23,12 @@ import { FONTS, SIZES, SHADOWS } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Card, EmptyState, Button } from '../../components/shared';
 import PDFViewer from '../../components/viewers/PDFViewer';
-import { delay, DUMMY_QUESTIONS, DUMMY_TEXTBOOKS, DUMMY_SESSIONS } from '../../services/dummyData';
+import VectraImageViewer from '../../components/viewers/ImageViewer';
+import { SkeletonQuestionList, SkeletonMaterialList } from '../../components/shared/Skeleton';
+import { delay } from '../../services/dummyData';
 import { AI_RESPONSES } from '../../constants/mockData';
+import { api } from '../../services/api';
+import useAuthStore from '../../store/authStore';
 
 const TABS = ['Questions', 'Materials', 'PDFs', 'Jot'];
 
@@ -35,6 +39,7 @@ export default function CourseDetailScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const courseCode = decodeURIComponent(id);
+  const currentUser = useAuthStore((s) => s.user);
 
   const [activeTab, setActiveTab] = useState(0);
   const pagerRef = useRef(null);
@@ -50,6 +55,7 @@ export default function CourseDetailScreen() {
   const [aiLoading, setAiLoading] = useState(false);
   const [pdfUploading, setPdfUploading] = useState(false);
   const [pdfViewer, setPdfViewer] = useState(null); // { url, title }
+  const [imageViewer, setImageViewer] = useState({ visible: false, urls: [], index: 0 });
 
   // API data state
   const [questions, setQuestions] = useState([]);
@@ -58,43 +64,105 @@ export default function CourseDetailScreen() {
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(true);
   const [isLoadingTextbooks, setIsLoadingTextbooks] = useState(true);
 
-  // Load questions, textbooks, and sessions from dummy data
+  // Load questions and textbooks from real API
   useEffect(() => {
     const loadQuestions = async () => {
       setIsLoadingQuestions(true);
-      await delay(400);
-      const filtered = DUMMY_QUESTIONS
-        .filter((q) => q.courseCode === courseCode)
-        .map((q) => ({
+      try {
+        const cc = encodeURIComponent(courseCode);
+
+        // Fetch approved uploads (visible to everyone)
+        const publishedRes = await api.get(`/uploads/published?course_code=${cc}&upload_type=past_question`);
+        const published = Array.isArray(publishedRes?.data) ? publishedRes.data : [];
+
+        // Fetch current user's own uploads (they see their own regardless of status)
+        let myOwn = [];
+        try {
+          const myRes = await api.get(`/uploads/my-uploads?course_code=${cc}&upload_type=past_question`);
+          myOwn = Array.isArray(myRes?.data) ? myRes.data : [];
+        } catch (_) {}
+
+        // Merge: own uploads first, skip any already in published list
+        const publishedIds = new Set(published.map((q) => q.id));
+        const ownPending = myOwn.filter((q) => !publishedIds.has(q.id));
+
+        const mapItem = (q, isOwn) => ({
           id: q.id,
-          courseCode: q.courseCode,
-          session: q.session,
-          semester: q.semester,
-          type: q.type,
-          pages: q.pages,
-          title: q.title,
-          imageUrl: null,
-          fileType: 'pdf',
-          source: 'past_questions',
-        }));
-      setQuestions(filtered);
-      setIsLoadingQuestions(false);
+          courseCode: q.course_code,
+          session: q.academic_session || '',
+          semester: q.semester || '',
+          type: q.exam_type || 'Exam',
+          pages: 0,
+          title: q.title || `${q.course_code} ${q.exam_type || ''} ${q.academic_session || ''}`.trim(),
+          imageUrl: q.file_url || null,
+          fileType: q.file_type || 'pdf',
+          source: 'user_upload',
+          myUpload: isOwn,
+          uploadStatus: q.status,
+        });
+
+        const allItems = [
+          ...ownPending.map((q) => mapItem(q, true)),
+          ...published.map((q) => mapItem(q, myOwn.some((m) => m.id === q.id))),
+        ];
+        setIsLoadingQuestions(false);
+        // Progressive reveal — show cards one by one
+        for (let i = 0; i < allItems.length; i++) {
+          await new Promise((r) => setTimeout(r, 60));
+          setQuestions((prev) => [...prev, allItems[i]]);
+        }
+      } catch (err) {
+        console.error('Failed to load questions:', err);
+        setIsLoadingQuestions(false);
+      }
     };
 
     const loadTextbooks = async () => {
       setIsLoadingTextbooks(true);
-      await delay(300);
-      setTextbooks(DUMMY_TEXTBOOKS.filter((t) => t.course_code === courseCode));
-      setIsLoadingTextbooks(false);
-    };
+      try {
+        const cc = encodeURIComponent(courseCode);
 
-    const loadSessions = () => {
-      setSessions(DUMMY_SESSIONS.map((s) => s.value));
+        const publishedRes = await api.get(`/uploads/published?course_code=${cc}&upload_type=textbook`);
+        const published = Array.isArray(publishedRes?.data) ? publishedRes.data : [];
+
+        let myOwn = [];
+        try {
+          const myRes = await api.get(`/uploads/my-uploads?course_code=${cc}&upload_type=textbook`);
+          myOwn = Array.isArray(myRes?.data) ? myRes.data : [];
+        } catch (_) {}
+
+        const publishedIds = new Set(published.map((t) => t.id));
+        const ownPending = myOwn.filter((t) => !publishedIds.has(t.id));
+
+        const mapItem = (t) => ({
+          id: t.id,
+          title: t.title || 'Untitled',
+          author: t.author || '',
+          edition: t.edition || '',
+          type: t.material_type || 'Textbook',
+          file_url: t.file_url,
+          course_code: t.course_code,
+          myUpload: myOwn.some((m) => m.id === t.id),
+          uploadStatus: t.status,
+        });
+
+        const allItems = [
+          ...ownPending.map(mapItem),
+          ...published.map(mapItem),
+        ];
+        setIsLoadingTextbooks(false);
+        for (let i = 0; i < allItems.length; i++) {
+          await new Promise((r) => setTimeout(r, 80));
+          setTextbooks((prev) => [...prev, allItems[i]]);
+        }
+      } catch (err) {
+        console.error('Failed to load textbooks:', err);
+        setIsLoadingTextbooks(false);
+      }
     };
 
     loadQuestions();
     loadTextbooks();
-    loadSessions();
   }, [courseCode]);
 
   // Filter questions client-side based on selected filters
@@ -251,9 +319,12 @@ export default function CourseDetailScreen() {
 
     const handleCardPress = () => {
       if (isUpload && hasFile) {
-        Linking.openURL(item.imageUrl).catch(() =>
-          Alert.alert('Cannot Open', 'Unable to open this file.')
-        );
+        const isImage = item.fileType === 'image' || /\.(jpg|jpeg|png|webp)$/i.test(item.imageUrl);
+        if (isImage) {
+          setImageViewer({ visible: true, urls: [item.imageUrl], index: 0 });
+        } else {
+          setPdfViewer({ url: item.imageUrl, title: item.title || courseCode });
+        }
       } else if (!isUpload) {
         router.push(`/question/${item.id}`);
       }
@@ -312,7 +383,7 @@ export default function CourseDetailScreen() {
                 style={styles.viewDocBtn}
                 onPress={handleCardPress}
               >
-                <Feather name="external-link" size={11} color={colors.brand.primary} />
+                <Feather name="eye" size={11} color={colors.brand.primary} />
                 <Text style={styles.viewDocText}>View</Text>
               </TouchableOpacity>
             )}
@@ -331,19 +402,38 @@ export default function CourseDetailScreen() {
     );
   };
 
+  const openTextbook = (item) => {
+    if (!item.file_url) return;
+    const isImage = item.fileType === 'image' || /\.(jpg|jpeg|png|webp)$/i.test(item.file_url);
+    if (isImage) {
+      setImageViewer({ visible: true, urls: [item.file_url], index: 0 });
+    } else {
+      setPdfViewer({ url: item.file_url, title: item.title || courseCode });
+    }
+  };
+
   const renderTextbook = ({ item }) => (
-    <Card style={styles.textbookCard}>
+    <Card
+      style={styles.textbookCard}
+      onPress={item.file_url ? () => openTextbook(item) : null}
+    >
       <View style={styles.textbookIcon}>
         <Feather name="book" size={24} color={colors.brand.primary} />
       </View>
       <View style={styles.textbookContent}>
         <Text style={styles.textbookTitle}>{item.title}</Text>
-        <Text style={styles.textbookAuthor}>{item.author}</Text>
+        {item.author ? <Text style={styles.textbookAuthor}>{item.author}</Text> : null}
         <View style={styles.textbookMeta}>
           <View style={styles.textbookTypeBadge}>
             <Text style={styles.textbookTypeText}>{item.type}</Text>
           </View>
-          <Text style={styles.textbookEdition}>{item.edition}</Text>
+          {item.edition ? <Text style={styles.textbookEdition}>{item.edition}</Text> : null}
+          {item.file_url ? (
+            <View style={styles.viewDocBtn}>
+              <Feather name="eye" size={11} color={colors.brand.primary} />
+              <Text style={styles.viewDocText}>Open</Text>
+            </View>
+          ) : null}
         </View>
       </View>
     </Card>
@@ -375,10 +465,7 @@ export default function CourseDetailScreen() {
 
       {/* Questions List */}
       {isLoadingQuestions ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.brand.secondary} />
-          <Text style={styles.loadingText}>Loading questions...</Text>
-        </View>
+        <SkeletonQuestionList count={4} />
       ) : filteredQuestions.length > 0 ? (
         <FlatList
           data={filteredQuestions}
@@ -401,10 +488,7 @@ export default function CourseDetailScreen() {
   const renderMaterialsTab = () => (
     <View style={styles.tabContent}>
       {isLoadingTextbooks ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.brand.secondary} />
-          <Text style={styles.loadingText}>Loading materials...</Text>
-        </View>
+        <SkeletonMaterialList count={3} />
       ) : textbooks.length > 0 ? (
         <FlatList
           data={textbooks}
@@ -731,6 +815,14 @@ export default function CourseDetailScreen() {
           url={pdfViewer?.url}
           title={pdfViewer?.title}
           onClose={() => setPdfViewer(null)}
+        />
+
+        {/* In-App Image Viewer */}
+        <VectraImageViewer
+          images={imageViewer.urls}
+          initialIndex={imageViewer.index}
+          visible={imageViewer.visible}
+          onClose={() => setImageViewer({ visible: false, urls: [], index: 0 })}
         />
 
         {/* AI Response Modal */}

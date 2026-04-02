@@ -16,18 +16,14 @@ import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Button, Card } from '../../components/shared';
 import { useToast } from '../../components/shared/Toast';
-import useAuthStore from '../../store/authStore';
-import { delay, DUMMY_SESSIONS } from '../../services/dummyData';
+import { api } from '../../services/api';
 
 export default function UploadQuestionScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { showToast } = useToast();
-  const getProfile = useAuthStore((s) => s.getProfile);
 
-  const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [profile, setProfile] = useState(null);
 
   // Form state
   const [selectedFile, setSelectedFile] = useState(null);
@@ -37,33 +33,14 @@ export default function UploadQuestionScreen() {
   const [semester, setSemester] = useState('');
   const [examType, setExamType] = useState('');
   const [description, setDescription] = useState('');
-  const [sessions, setSessions] = useState([]);
+  const [sessions, setSessions] = useState(['2021/2022', '2022/2023', '2023/2024', '2024/2025', '2025/2026']);
 
   useEffect(() => {
-    loadProfile();
-    fetchSessions();
+    api.getSessions().then((res) => {
+      const data = res?.data?.sessions || res?.sessions || [];
+      if (Array.isArray(data) && data.length > 0) setSessions(data);
+    }).catch(() => {});
   }, []);
-
-  const fetchSessions = async () => {
-    try {
-      await delay(300);
-      setSessions(DUMMY_SESSIONS.map((s) => s.value));
-    } catch (err) {
-      setSessions(['2021/2022', '2022/2023', '2023/2024', '2024/2025', '2025/2026']);
-    }
-  };
-
-  const loadProfile = async () => {
-    setLoading(true);
-    try {
-      const p = await getProfile();
-      setProfile(p);
-    } catch (err) {
-      // silently handle
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handlePickFile = async () => {
     try {
@@ -111,8 +88,21 @@ export default function UploadQuestionScreen() {
 
     setUploading(true);
     try {
-      await delay(1500);
-      showToast('success', 'Question uploaded successfully! It will be reviewed before publishing.');
+      const formData = new FormData();
+      formData.append('file', {
+        uri: selectedFile.uri,
+        type: selectedFile.mimeType || 'application/pdf',
+        name: selectedFile.name || 'upload.pdf',
+      });
+      formData.append('course_code', courseCode.trim().toUpperCase());
+      if (courseName.trim()) formData.append('course_name', courseName.trim());
+      formData.append('academic_session', session);
+      if (semester) formData.append('semester', semester);
+      formData.append('exam_type', examType);
+      if (description.trim()) formData.append('description', description.trim());
+
+      await api.uploadPastQuestion(formData);
+      showToast('success', 'Question uploaded successfully!');
       router.back();
     } catch (err) {
       showToast('error', err.message || 'Failed to upload question');
@@ -148,7 +138,7 @@ export default function UploadQuestionScreen() {
           <Card style={styles.infoCard}>
             <Feather name="info" size={20} color={colors.brand.secondary} />
             <Text style={styles.infoText}>
-              Help your fellow students by uploading past questions. All uploads will be reviewed before publishing.
+              Help your fellow students by uploading past questions. PDF or image files accepted.
             </Text>
           </Card>
 

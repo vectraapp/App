@@ -14,7 +14,6 @@ import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { FONTS, SIZES } from '../../constants/theme';
 import { Button, Card } from '../../components/shared';
-import { SkeletonProfile } from '../../components/shared/Skeleton';
 import { useToast } from '../../components/shared/Toast';
 import { useTheme } from '../../context/ThemeContext';
 import useAuthStore from '../../store/authStore';
@@ -25,31 +24,11 @@ export default function ProfileScreen() {
   const { colors } = useTheme();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
-  const getProfile = useAuthStore((s) => s.getProfile);
   const updateProfile = useAuthStore((s) => s.updateProfile);
 
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
-  const [avatarUrl, setAvatarUrl] = useState(null);
-
-  useEffect(() => {
-    loadProfile();
-  }, []);
-
-  const loadProfile = async () => {
-    try {
-      const p = await getProfile();
-      setProfile(p);
-      if (p?.avatarUrl) {
-        setAvatarUrl(p.avatarUrl);
-      }
-    } catch (err) {
-      // silently handle
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || user?.avatarUrl || null);
 
   const handleLogout = async () => {
     await logout();
@@ -99,16 +78,12 @@ export default function ProfileScreen() {
 
   const styles = createStyles(colors);
 
-  if (loading) {
-    return <SkeletonProfile />;
-  }
-
-  const displayName = user?.displayName || user?.display_name || profile?.displayName || profile?.display_name || '';
+  const displayName = user?.display_name || user?.displayName || '';
   const initials = displayName
     ? displayName.split(' ').filter(Boolean).map((n) => n[0]).join('').toUpperCase().slice(0, 2)
     : '';
 
-  const userRole = user?.profile?.role || user?.role || profile?.role || 'user';
+  const userRole = user?.profile?.role || user?.role || 'user';
   const roleStr = Array.isArray(userRole) ? userRole[0] : userRole;
   const isAdmin = roleStr === 'admin' || roleStr === 'super_admin';
   const isContributor = roleStr === 'contributor';
@@ -163,25 +138,33 @@ export default function ProfileScreen() {
         </View>
 
         {/* Academic Info */}
-        {profile ? (
+        {(user?.university_id || user?.department_id) ? (
           <Card style={styles.infoCard}>
             <Text style={styles.infoCardTitle}>Academic Information</Text>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>University</Text>
-              <Text style={styles.infoValue}>{profile.universityName}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Faculty</Text>
-              <Text style={styles.infoValue}>{profile.facultyName}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Department</Text>
-              <Text style={styles.infoValue}>{profile.departmentName}</Text>
-            </View>
-            <View style={[styles.infoRow, styles.infoRowLast]}>
-              <Text style={styles.infoLabel}>Level</Text>
-              <Text style={styles.infoValue}>{profile.level}</Text>
-            </View>
+            {user?.university_id ? (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>University</Text>
+                <Text style={styles.infoValue}>{user.university_id}</Text>
+              </View>
+            ) : null}
+            {user?.faculty_id ? (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Faculty</Text>
+                <Text style={styles.infoValue}>{user.faculty_id}</Text>
+              </View>
+            ) : null}
+            {user?.department_id ? (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Department</Text>
+                <Text style={styles.infoValue}>{user.department_id}</Text>
+              </View>
+            ) : null}
+            {user?.current_level ? (
+              <View style={[styles.infoRow, styles.infoRowLast]}>
+                <Text style={styles.infoLabel}>Level</Text>
+                <Text style={styles.infoValue}>{user.current_level}</Text>
+              </View>
+            ) : null}
           </Card>
         ) : null}
 

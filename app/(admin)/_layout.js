@@ -46,8 +46,9 @@ export default function AdminLayout() {
           backgroundColor: colors.background.navbar,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          height: 60,
+          height: 72,
           paddingTop: 6,
+          paddingBottom: 12,
         },
       }}
     >
@@ -84,15 +85,6 @@ export default function AdminLayout() {
           title: 'Users',
           tabBarIcon: ({ color, size }) => (
             <Feather name="users" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="structure"
-        options={{
-          title: 'Structure',
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="git-branch" size={size} color={color} />
           ),
         }}
       />

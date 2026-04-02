@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -15,17 +15,14 @@ import { FONTS, SIZES } from '../../constants/theme';
 import { useTheme } from '../../context/ThemeContext';
 import { Button, Card } from '../../components/shared';
 import { useToast } from '../../components/shared/Toast';
-import useAuthStore from '../../store/authStore';
+import { api } from '../../services/api';
 
 export default function UploadTextbookScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { showToast } = useToast();
-  const getProfile = useAuthStore((s) => s.getProfile);
 
-  const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [profile, setProfile] = useState(null);
 
   // Form state
   const [selectedFile, setSelectedFile] = useState(null);
@@ -35,22 +32,6 @@ export default function UploadTextbookScreen() {
   const [courseCode, setCourseCode] = useState('');
   const [materialType, setMaterialType] = useState('');
   const [description, setDescription] = useState('');
-
-  useEffect(() => {
-    loadProfile();
-  }, []);
-
-  const loadProfile = async () => {
-    setLoading(true);
-    try {
-      const p = await getProfile();
-      setProfile(p);
-    } catch (err) {
-      // silently handle
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handlePickFile = async () => {
     try {
@@ -94,12 +75,24 @@ export default function UploadTextbookScreen() {
 
     setUploading(true);
     try {
-      // Simulate upload
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      showToast('success', 'Textbook uploaded successfully! It will be reviewed before publishing.');
+      const formData = new FormData();
+      formData.append('file', {
+        uri: selectedFile.uri,
+        type: selectedFile.mimeType || 'application/pdf',
+        name: selectedFile.name || 'textbook.pdf',
+      });
+      formData.append('title', title.trim());
+      if (author.trim()) formData.append('author', author.trim());
+      if (edition.trim()) formData.append('edition', edition.trim());
+      if (courseCode.trim()) formData.append('course_code', courseCode.trim().toUpperCase());
+      formData.append('material_type', materialType);
+      if (description.trim()) formData.append('description', description.trim());
+
+      await api.uploadTextbook(formData);
+      showToast('success', 'Material uploaded successfully!');
       router.back();
     } catch (err) {
-      showToast('error', 'Failed to upload textbook');
+      showToast('error', err.message || 'Failed to upload textbook');
     } finally {
       setUploading(false);
     }

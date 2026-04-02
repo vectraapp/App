@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { View } from 'react-native';
 import { Tabs, useRouter, usePathname } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { FONTS, SIZES } from '../../constants/theme';
@@ -50,6 +51,7 @@ export default function TabsLayout() {
 
   return (
     <GestureDetector gesture={swipeGesture}>
+      <View collapsable={false} style={{ flex: 1 }}>
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -112,6 +114,7 @@ export default function TabsLayout() {
           }}
         />
       </Tabs>
+      </View>
     </GestureDetector>
   );
 }

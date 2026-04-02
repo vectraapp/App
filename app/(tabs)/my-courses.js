@@ -15,30 +15,41 @@ import { useTheme } from '../../context/ThemeContext';
 import { Card, EmptyState } from '../../components/shared';
 import { SkeletonCourseList } from '../../components/shared/Skeleton';
 import useAuthStore from '../../store/authStore';
-import { delay, DUMMY_COURSES } from '../../services/dummyData';
+import useCourseStore from '../../store/courseStore';
+import { api } from '../../services/api';
+
 
 export default function MyCoursesScreen() {
   const router = useRouter();
-  const getProfile = useAuthStore((s) => s.getProfile);
   const user = useAuthStore((s) => s.user);
   const semester = useAuthStore((s) => s.semester);
+  const searchFromCache = useCourseStore((s) => s.search);
   const { colors } = useTheme();
 
-  const [profile, setProfile] = useState(null);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
 
-  const filteredCourses = useMemo(() => {
-    let result = courses.filter((c) => (c.semester ?? 1) === semester);
-    if (!searchQuery.trim()) return result;
-    const q = searchQuery.toLowerCase();
-    return result.filter(
-      (c) =>
-        (c.code || c.course_code || '').toLowerCase().includes(q) ||
-        (c.name || c.title || '').toLowerCase().includes(q)
-    );
-  }, [courses, searchQuery, semester]);
+  const isSearching = searchQuery.trim().length > 0;
+
+  const semesterMatchesFilter = (course) => {
+    const s = course.semester;
+    if (s == null) return true;
+    if (typeof s === 'number') return s === semester;
+    const str = String(s).toLowerCase();
+    if (semester === 1) return str.includes('first') || str === '1';
+    if (semester === 2) return str.includes('second') || str === '2';
+    return true;
+  };
+
+  // My courses (no search) — filtered by level + semester
+  const myCourses = useMemo(
+    () => courses.filter(semesterMatchesFilter),
+    [courses, semester]
+  );
+
+  const displayCourses = isSearching ? searchResults : myCourses;
 
   const styles = createStyles(colors);
 
@@ -46,15 +57,30 @@ export default function MyCoursesScreen() {
     loadData();
   }, []);
 
+  // Instant local search from cached university courses
+  useEffect(() => {
+    if (!isSearching) { setSearchResults([]); return; }
+    setSearchResults(searchFromCache(searchQuery));
+  }, [searchQuery]);
+
   const loadData = async () => {
     try {
-      const userProfile = await getProfile();
-      setProfile(userProfile);
-      await delay(500);
-      const levelCourses = userProfile?.level
-        ? DUMMY_COURSES.filter((c) => c.level === userProfile.level)
-        : DUMMY_COURSES;
-      setCourses(levelCourses.length > 0 ? levelCourses : DUMMY_COURSES);
+      const departmentId = user?.department_id || user?.profile?.department_id;
+      if (!departmentId) {
+        setLoading(false);
+        return;
+      }
+      const res = await api.getCourses(departmentId);
+      const data = res?.data || res?.courses || [];
+      const all = Array.isArray(data) ? data : [];
+
+      // Filter by current level — only show courses for the student's year
+      const currentLevel = user?.current_level || user?.profile?.current_level;
+      const levelFiltered = currentLevel
+        ? all.filter((c) => !c.level || c.level === currentLevel)
+        : all;
+
+      setCourses(levelFiltered);
     } catch (err) {
       console.error('Failed to load courses:', err);
     } finally {
@@ -63,10 +89,11 @@ export default function MyCoursesScreen() {
   };
 
   const renderCourse = ({ item }) => {
-    const courseCode = item.code || item.course_code || '';
-    const courseName = item.name || item.title || '';
-    const courseUnits = item.units || item.credit_units || 0;
+    const courseCode = item.course_code || item.code || '';
+    const courseName = item.course_name || item.name || item.title || '';
+    const courseUnits = item.credit_units || item.units || 0;
     const questionCount = item.question_count || 0;
+    const deptName = item.department?.name || '';
 
     return (
       <Card
@@ -82,6 +109,9 @@ export default function MyCoursesScreen() {
           </View>
         </View>
         <Text style={styles.courseName}>{courseName}</Text>
+        {isSearching && deptName ? (
+          <Text style={styles.deptLabel}>{deptName}</Text>
+        ) : null}
         <View style={styles.courseFooter}>
           <Feather name="file-text" size={14} color={colors.text.muted} />
           <Text style={styles.questionCount}>
@@ -107,7 +137,7 @@ export default function MyCoursesScreen() {
               Hello, {user?.display_name?.split(' ')[0] || user?.displayName?.split(' ')[0] || 'Student'}
             </Text>
             <Text style={styles.headerSubtitle}>
-              {profile?.departmentName || 'Department'} · {profile?.level ? `Part ${profile.level}` : 'Level'} · {semester === 1 ? '1st' : '2nd'} Semester
+              {user?.department_id || 'Department'} · {user?.current_level || ''} · {semester === 1 ? '1st' : '2nd'} Semester
             </Text>
           </View>
           <TouchableOpacity
@@ -138,18 +168,20 @@ export default function MyCoursesScreen() {
 
         {/* Section Title */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Your Courses</Text>
+          <Text style={styles.sectionTitle}>
+            {isSearching ? 'Search Results' : 'Your Courses'}
+          </Text>
           <Text style={styles.sectionCount}>
-            {filteredCourses.length}{searchQuery ? ` of ${courses.length}` : ''} courses
+            {`${displayCourses.length} course${displayCourses.length !== 1 ? 's' : ''}`}
           </Text>
         </View>
 
         {/* Course List */}
-        {filteredCourses.length > 0 ? (
+        {displayCourses.length > 0 ? (
           <FlatList
-            data={filteredCourses}
+            data={displayCourses}
             renderItem={renderCourse}
-            keyExtractor={(item) => item.id || item._id || item.code || item.course_code}
+            keyExtractor={(item) => String(item.id || item.code || item.course_code)}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
@@ -157,10 +189,10 @@ export default function MyCoursesScreen() {
         ) : (
           <EmptyState
             icon="book"
-            title="No courses found"
+            title={isSearching ? 'No courses found' : 'No courses found'}
             message={
-              searchQuery
-                ? `No ${semester === 1 ? 'first' : 'second'} semester courses match your search.`
+              isSearching
+                ? `No courses match "${searchQuery}". Try a different code or name.`
                 : `No ${semester === 1 ? 'first' : 'second'} semester courses found for your level.`
             }
           />
@@ -293,8 +325,14 @@ const createStyles = (colors) => StyleSheet.create({
   courseName: {
     fontSize: SIZES.base,
     color: colors.text.primary,
-    marginBottom: 10,
+    marginBottom: 4,
     ...FONTS.medium,
+  },
+  deptLabel: {
+    fontSize: SIZES.xs,
+    color: colors.text.muted,
+    marginBottom: 8,
+    ...FONTS.regular,
   },
   courseFooter: {
     flexDirection: 'row',

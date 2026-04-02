@@ -14,8 +14,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { Button, Loader } from '../../components/shared';
 import { useToast } from '../../components/shared/Toast';
 import useAuthStore from '../../store/authStore';
-import { UNIVERSITIES } from '../../constants/mockData';
-import { delay } from '../../services/dummyData';
+import { api } from '../../services/api';
 
 const TOTAL_STEPS = 6;
 
@@ -62,89 +61,66 @@ export default function OnboardingScreen() {
   const step = STEP_CONFIG[currentStep];
 
   // --------------------------------------------------
-  // Load universities on mount (local data)
+  // Load universities on mount (from API)
   // --------------------------------------------------
   useEffect(() => {
-    setFetching(true);
-    // Map to shape expected by getItems()
-    const mapped = UNIVERSITIES.map((u) => ({
-      id: u.id,
-      name: u.name,
-      short_name: u.shortName,
-      state: u.location,
-    }));
-    setUniversities(mapped);
-    setFetching(false);
+    const load = async () => {
+      setFetching(true);
+      try {
+        const res = await api.getUniversities();
+        setUniversities(res?.data || []);
+      } catch (_) {}
+      setFetching(false);
+    };
+    load();
   }, []);
 
   // --------------------------------------------------
-  // Local data navigation helpers
+  // API data navigation helpers
   // --------------------------------------------------
-  const fetchFaculties = (universityId) => {
+  const fetchFaculties = async (universityId) => {
     setFetching(true);
     setFaculties([]);
-    const uni = UNIVERSITIES.find((u) => u.id === universityId);
-    const mapped = (uni?.faculties || []).map((f) => ({ id: f.id, name: f.name }));
-    setFaculties(mapped);
+    try {
+      const res = await api.getFaculties(universityId);
+      setFaculties(res?.data || []);
+    } catch (_) {}
     setFetching(false);
   };
 
-  const fetchDepartments = (facultyId) => {
+  const fetchDepartments = async (facultyId) => {
     setFetching(true);
     setDepartments([]);
-    let found = [];
-    for (const uni of UNIVERSITIES) {
-      const fac = uni.faculties.find((f) => f.id === facultyId);
-      if (fac) {
-        found = fac.departments.map((d) => ({ id: d.id, name: d.name }));
-        break;
-      }
-    }
-    setDepartments(found);
+    try {
+      const res = await api.getDepartments(facultyId);
+      setDepartments(res?.data || []);
+    } catch (_) {}
     setFetching(false);
   };
 
-  const fetchLevels = (departmentId) => {
+  const fetchLevels = async (universityId) => {
     setFetching(true);
     setLevels([]);
-    let found = [];
-    outer: for (const uni of UNIVERSITIES) {
-      for (const fac of uni.faculties) {
-        const dept = fac.departments.find((d) => d.id === departmentId);
-        if (dept) {
-          found = dept.levels || [];
-          break outer;
-        }
-      }
-    }
-    setLevels(found);
+    try {
+      const res = await api.getLevels(universityId);
+      setLevels(res?.data || []);
+    } catch (_) {}
     setFetching(false);
   };
 
-  const fetchCourses = (departmentId, level, semester) => {
+  const fetchCourses = async (departmentId, level, semester) => {
     setFetching(true);
     setCourses([]);
     const semesterMap = { first: 'First Semester', second: 'Second Semester' };
     const semesterFull = semesterMap[semester] || semester;
-    let found = [];
-    outer: for (const uni of UNIVERSITIES) {
-      for (const fac of uni.faculties) {
-        const dept = fac.departments.find((d) => d.id === departmentId);
-        if (dept) {
-          const levelCourses = dept.courses?.[level] || [];
-          found = levelCourses
-            .filter((c) => c.semesters.includes(semesterFull))
-            .map((c, i) => ({
-              id: `${dept.id}_${level}_${c.code}`.replace(/\s/g, '_'),
-              code: c.code,
-              title: c.name,
-              credit_units: c.units,
-            }));
-          break outer;
-        }
-      }
-    }
-    setCourses(found);
+    try {
+      const res = await api.getCourses(departmentId);
+      const all = res?.data || [];
+      const filtered = all.filter(
+        (c) => c.level === level && c.semester === semesterFull
+      );
+      setCourses(filtered);
+    } catch (_) {}
     setFetching(false);
   };
 
@@ -157,7 +133,9 @@ export default function OnboardingScreen() {
         return universities.map((u) => ({
           id: u.id,
           title: u.name,
-          subtitle: u.short_name ? `${u.short_name} — ${u.state || ''}`.trim() : u.state || '',
+          subtitle: u.short_name
+            ? `${u.short_name}${u.state ? ` — ${u.state}` : ''}`
+            : (u.state || ''),
           data: u,
         }));
       case 1:
@@ -273,7 +251,7 @@ export default function OnboardingScreen() {
 
     if (currentStep === 2 && selectedDepartment) {
       setCurrentStep(nextStep);
-      fetchLevels(selectedDepartment.id);
+      fetchLevels(selectedUniversity.id);
       return;
     }
 
@@ -301,19 +279,12 @@ export default function OnboardingScreen() {
   const handleFinish = async () => {
     setEnrolling(true);
     try {
-      await delay(800);
-
-      // Save onboarding profile locally
       const semesterMap = { first: 'First Semester', second: 'Second Semester' };
       await completeOnboarding({
         universityId: selectedUniversity.id,
-        universityName: selectedUniversity.name,
-        universityAbbreviation: selectedUniversity.short_name || '',
         facultyId: selectedFaculty.id,
-        facultyName: selectedFaculty.name,
         departmentId: selectedDepartment.id,
-        departmentName: selectedDepartment.name,
-        level: selectedLevel,
+        currentLevel: selectedLevel,
         semester: semesterMap[selectedSemester] || selectedSemester,
       });
 
